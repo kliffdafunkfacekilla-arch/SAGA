@@ -109,7 +109,11 @@ def setup_database():
         id INTEGER PRIMARY KEY,
         name TEXT,
         culture TEXT,
-        population INTEGER
+        population INTEGER,
+        morale REAL DEFAULT 100.0,
+        chaos_level REAL DEFAULT 0.0,
+        x_coord REAL,
+        y_coord REAL
     );
     ''')
     
@@ -168,6 +172,100 @@ def setup_database():
         faction_b TEXT,
         good_type TEXT,
         volume REAL
+    );
+    ''')
+    
+    # 8. PHYSICAL NETWORKS
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS burg_routes (
+        burg_a INTEGER,
+        burg_b INTEGER,
+        distance REAL,
+        PRIMARY KEY (burg_a, burg_b),
+        FOREIGN KEY(burg_a) REFERENCES burgs(id),
+        FOREIGN KEY(burg_b) REFERENCES burgs(id)
+    );
+    ''')
+    
+    # 9. SHADOW FACTIONS
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS shadow_factions (
+        id INTEGER PRIMARY KEY,
+        name TEXT,
+        type TEXT,
+        treasury REAL DEFAULT 0.0,
+        smuggled_goods REAL DEFAULT 0.0
+    );
+    ''')
+    
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS shadow_presence (
+        faction_id INTEGER,
+        burg_id INTEGER,
+        influence_level REAL DEFAULT 1.0,
+        hidden BOOLEAN DEFAULT 1,
+        PRIMARY KEY (faction_id, burg_id),
+        FOREIGN KEY(faction_id) REFERENCES shadow_factions(id),
+        FOREIGN KEY(burg_id) REFERENCES burgs(id)
+    );
+    ''')
+    
+    # 10. THE CHAOS LAYER: Wardens vs Cults
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS world_prisons (
+        prison_id INTEGER PRIMARY KEY,
+        name TEXT,
+        containment_strength REAL DEFAULT 10000.0,
+        chaos_pressure REAL DEFAULT 0.0,
+        cell_id INTEGER
+    );
+    ''')
+    
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS cult_forces (
+        cult_id INTEGER,
+        location_type TEXT, -- 'Burg' or 'Prison'
+        location_id INTEGER,
+        new_members REAL DEFAULT 0.0,
+        priests REAL DEFAULT 0.0,
+        PRIMARY KEY (cult_id, location_type, location_id)
+    );
+    ''')
+    
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS warden_forces (
+        location_type TEXT, -- 'Burg' or 'Prison'
+        location_id INTEGER,
+        patrols REAL DEFAULT 0.0,
+        the_eyeless REAL DEFAULT 0.0,
+        PRIMARY KEY (location_type, location_id)
+    );
+    ''')
+    
+    # 11. THE PARAGON SYSTEM (Character-Driven Sim)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS paragons (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        role TEXT,
+        location_id INTEGER,
+        faction_name TEXT,
+        might INTEGER DEFAULT 10,
+        endurance INTEGER DEFAULT 10,
+        finesse INTEGER DEFAULT 10,
+        reflex INTEGER DEFAULT 10,
+        vitality INTEGER DEFAULT 10,
+        fortitude INTEGER DEFAULT 10,
+        knowledge INTEGER DEFAULT 10,
+        logic INTEGER DEFAULT 10,
+        awareness INTEGER DEFAULT 10,
+        intuition INTEGER DEFAULT 10,
+        charm INTEGER DEFAULT 10,
+        willpower INTEGER DEFAULT 10,
+        trait_1 TEXT,
+        trait_2 TEXT,
+        flaw_1 TEXT,
+        flaw_2 TEXT
     );
     ''')
     
