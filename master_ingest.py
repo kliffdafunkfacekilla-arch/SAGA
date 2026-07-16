@@ -3,6 +3,8 @@ import csv
 import os
 import random
 import math
+import json
+import narrative_engine
 
 def calculate_distance(x1, y1, x2, y2):
     return math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
@@ -11,16 +13,35 @@ def master_ingest(db_path, burgs_csv, goods_csv, states_csv, relations_csv, reli
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
-    # Clear all data
-    cursor.execute("DELETE FROM burgs")
-    cursor.execute("DELETE FROM goods_catalog")
-    cursor.execute("DELETE FROM burg_stocks")
-    cursor.execute("DELETE FROM burg_production")
-    cursor.execute("DELETE FROM ecology_output")
-    cursor.execute("DELETE FROM faction_relations")
-    cursor.execute("DELETE FROM faction_military")
-    cursor.execute("DELETE FROM burg_routes")
-    cursor.execute("DELETE FROM shadow_factions")
+
+    # 0. INGEST LORE
+    import glob
+    print("Ingesting Lore Markdown...")
+    cursor.execute('DELETE FROM world_lore')
+    lore_files = glob.glob(os.path.join('data', 'Chapter_*.md'))
+    rows = []
+    for file in lore_files:
+        basename = os.path.basename(file)
+        with open(file, 'r', encoding='utf-8') as lf:
+            content = lf.read()
+        title = basename.replace('.md', '').replace('_', ' ')
+        for line in content.split('\n'):
+            if line.startswith('# '):
+                title = line.replace('# ', '').strip()
+                break
+        rows.append((title, content, basename))
+    cursor.executemany('INSERT INTO world_lore (subject, content, source_file) VALUES (?, ?, ?)', rows)
+
+    # Clean start for certain tables (optional but good for testing)
+    tables_to_clear = [
+        "ecology_output", "burg_stocks", "burg_production", "burgs", 
+        "goods_catalog", "faction_military", "shadow_presence", "shadow_factions"
+    ]
+    for table in tables_to_clear:
+        try:
+            cursor.execute(f"DELETE FROM {table}")
+        except sqlite3.OperationalError:
+            pass
     cursor.execute("DELETE FROM shadow_presence")
     cursor.execute("DELETE FROM world_prisons")
     cursor.execute("DELETE FROM cult_forces")
@@ -62,9 +83,11 @@ def master_ingest(db_path, burgs_csv, goods_csv, states_csv, relations_csv, reli
                 
                 x = float(row.get('X', 0))
                 y = float(row.get('Y', 0))
+                lat = float(row.get('Latitude', 0))
+                lon = float(row.get('Longitude', 0))
                 
                 # Burgs start with high morale, zero chaos, and Clear weather
-                burg_rows.append((b_id, name, culture, pop, 100.0, 0.0, x, y, 'Clear'))
+                burg_rows.append((b_id, name, culture, pop, 100.0, 0.0, x, y, lat, lon, 'Clear'))
                 burg_locations.append((b_id, x, y))
                 
                 if grain_id:
@@ -78,7 +101,7 @@ def master_ingest(db_path, burgs_csv, goods_csv, states_csv, relations_csv, reli
                         prod_rate = random.uniform(10.0, 100.0)
                         prod_rows.append((b_id, g_id, prod_rate))
                         
-            cursor.executemany("INSERT OR REPLACE INTO burgs (id, name, culture, population, morale, chaos_level, x_coord, y_coord, current_weather) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", burg_rows)
+            cursor.executemany("INSERT OR REPLACE INTO burgs (id, name, culture, population, morale, chaos_level, x_coord, y_coord, lat, lon, current_weather) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", burg_rows)
             cursor.executemany("INSERT INTO burg_stocks (burg_id, good_id, food_type, stock, consumption) VALUES (?, ?, ?, ?, ?)", stock_rows)
             cursor.executemany("INSERT INTO burg_production (burg_id, good_id, production_rate) VALUES (?, ?, ?)", prod_rows)
 
@@ -155,7 +178,7 @@ def master_ingest(db_path, burgs_csv, goods_csv, states_csv, relations_csv, reli
 
     # 6.5 INGEST GEOGRAPHY
     print("Ingesting Geography...")
-    data_dir = "Okasha - Copy"
+    data_dir = "data"
     biomes_csv = os.path.join(data_dir, "Okasha Biomes 2026-06-26-07-00.csv")
     if os.path.exists(biomes_csv):
         with open(biomes_csv, "r", encoding="utf-8") as f:
@@ -205,9 +228,10 @@ def master_ingest(db_path, burgs_csv, goods_csv, states_csv, relations_csv, reli
             reader = csv.DictReader(f)
             z_rows = []
             for r in reader:
-                cx, cy = zone_centers.get(r["Id"], (0,0))
-                z_rows.append((r["Id"], r["Description"], r["Type"], r["Cells"], cx, cy))
-            cursor.executemany("INSERT OR REPLACE INTO zones VALUES (?, ?, ?, ?, ?, ?)", z_rows)
+                lon, lat = zone_centers.get(r["Id"], (0,0))
+                # For zones, we put 0 for x/y and put the geojson center in lat/lon
+                z_rows.append((r["Id"], r["Description"], r["Type"], r["Cells"], 0, 0, lat, lon))
+            cursor.executemany("INSERT OR REPLACE INTO zones VALUES (?, ?, ?, ?, ?, ?, ?, ?)", z_rows)
 
     # 7. INGEST CHAOS LAYER (Prisons, Wardens, Cults)
     prison_names = [
@@ -215,7 +239,7 @@ def master_ingest(db_path, burgs_csv, goods_csv, states_csv, relations_csv, reli
         "The Weeping Stone", "The Obsidian Tomb", "The Frozen Lock", "The Emerald Chain", 
         "The Silent Cage", "The Shadow Bind", "The Gilded Prison", "The Final Lock"
     ]
-    cursor.execute("SELECT id, x_coord, y_coord FROM zones WHERE type != 'Worm Cult' LIMIT 8")
+    cursor.execute("SELECT id, lat, lon FROM zones WHERE type != 'Worm Cult' LIMIT 8")
     chaos_zones = cursor.fetchall()
     
     cursor.execute("SELECT id, name FROM burgs")
@@ -308,14 +332,18 @@ def master_ingest(db_path, burgs_csv, goods_csv, states_csv, relations_csv, reli
 
     conn.commit()
     conn.close()
-    print("Master Ingestion complete: Chaos Layer linked.")
+    # 10. GENERATE NARRATIVE HOOKS
+    print("Generating Narrative Matrix...")
+    narrative_engine.generate_initial_hooks(db_path)
+    
+    print("Master Ingestion complete: Chaos Layer and Narrative Matrix linked.")
 
 if __name__ == "__main__":
     master_ingest(
         'okasha_world.db', 
-        'Okasha - Copy/Okasha Burgs 2026-06-26-06-56.csv', 
-        'Okasha - Copy/Okasha Goods 2026-06-26-06-59.csv',
-        'Okasha - Copy/Okasha States 2026-06-26-06-57.csv',
-        'Okasha - Copy/Okasha Relations 2026-06-26-06-58.csv',
-        'Okasha - Copy/Okasha Religions 2026-06-26-06-57.csv'
+        'data/Okasha Burgs 2026-06-26-06-56.csv', 
+        'data/Okasha Goods 2026-06-26-06-59.csv',
+        'data/Okasha States 2026-06-26-06-57.csv',
+        'data/Okasha Relations 2026-06-26-06-58.csv',
+        'data/Okasha Religions 2026-06-26-06-57.csv'
     )

@@ -153,6 +153,58 @@ def setup_database():
     ''')
 
     cursor.execute('''
+        CREATE TABLE IF NOT EXISTS region_cells (
+            region_name TEXT,
+            cell_id INTEGER,
+            PRIMARY KEY (region_name, cell_id)
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS story_hooks (
+            id INTEGER PRIMARY KEY,
+            location_type TEXT,
+            location_id INTEGER,
+            hook_category TEXT,
+            description TEXT,
+            status TEXT DEFAULT 'Active'
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS lore_crosslinks (
+            hook_id INTEGER,
+            lore_id INTEGER,
+            PRIMARY KEY (hook_id, lore_id)
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS map_sectors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            location_type TEXT,
+            location_id INTEGER,
+            sector_index INTEGER,
+            base_biome TEXT,
+            feature_archetype TEXT,
+            seed INTEGER,
+            discovered BOOLEAN DEFAULT 1
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS map_deltas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sector_id INTEGER,
+            local_x INTEGER,
+            local_y INTEGER,
+            change_type TEXT,
+            details TEXT,
+            FOREIGN KEY(sector_id) REFERENCES map_sectors(id)
+        )
+    ''')
+
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS rivers (
             id INTEGER PRIMARY KEY,
             name TEXT,

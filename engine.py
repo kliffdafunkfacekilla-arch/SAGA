@@ -1,6 +1,7 @@
 import sqlite3
 import os
 import random
+import narrative_engine
 
 TICK_FILE = 'current_tick.txt'
 
@@ -294,7 +295,10 @@ def run_world_tick(db_path):
 
     conn.commit()
     conn.close()
-    print("Tick processed successfully.")
+    
+    # Generate Narrative Matrix
+    print("Generating Narrative Hooks...")
+    narrative_engine.generate_initial_hooks(db_path)
 
 def run_simulation_tick(famine_faction=None):
     tick = get_current_tick()

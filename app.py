@@ -1,7 +1,8 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, send_from_directory
 import sqlite3
 import os
 import subprocess
+import command_parser
 
 app = Flask(__name__)
 DB_PATH = 'okasha_world.db'
@@ -50,26 +51,93 @@ def stats():
     stats_data['shadows'] = [{"name": s["name"], "type": s["type"], "treasury": round(s["treasury"], 1)} for s in shadows] if shadows else []
     
     # Map Data: Burgs
-    burgs = query_db("SELECT name, morale, chaos_level, x_coord, y_coord, current_weather FROM burgs")
+    burgs = query_db("SELECT id, name, morale, chaos_level, lat, lon, current_weather FROM burgs")
     stats_data['map_burgs'] = [dict(b) for b in burgs] if burgs else []
     
     # Map Data: Zones
-    zones = query_db("SELECT name, type, x_coord, y_coord FROM zones WHERE x_coord != 0 AND y_coord != 0")
+    zones = query_db("SELECT id, name, type, lat, lon FROM zones")
     stats_data['map_zones'] = [dict(z) for z in zones] if zones else []
     
     # Map Data: Markers
-    markers = query_db("SELECT name, icon, x_coord, y_coord FROM markers")
+    markers = query_db("SELECT id, name, icon, lat, lon FROM markers")
     stats_data['map_markers'] = [dict(m) for m in markers] if markers else []
     
     # Map Data: Prisons (Join with burgs to get coords since cell_id is burg_id)
     map_prisons = query_db('''
-        SELECT p.name, p.containment_strength, b.x_coord, b.y_coord 
+        SELECT p.prison_id as id, p.name, p.containment_strength, b.lat, b.lon 
         FROM world_prisons p
         JOIN burgs b ON p.cell_id = b.id
     ''')
     stats_data['map_prisons'] = [dict(p) for p in map_prisons] if map_prisons else []
     
     return jsonify(stats_data)
+
+@app.route('/api/hooks/<location_type>/<int:location_id>')
+def get_hooks(location_type, location_id):
+    # Fetch story hooks
+    hooks = query_db('''
+        SELECT id, hook_category, description, status 
+        FROM story_hooks 
+        WHERE location_type = ? AND location_id = ?
+    ''', [location_type, location_id])
+    
+    if not hooks:
+        return jsonify([])
+        
+    result = []
+    for h in hooks:
+        hook_dict = dict(h)
+        # Fetch crosslinked lore
+        lore = query_db('''
+            SELECT l.lore_id, l.subject, l.content 
+            FROM world_lore l
+            JOIN lore_crosslinks c ON c.lore_id = l.lore_id
+            WHERE c.hook_id = ?
+        ''', [h['id']])
+        hook_dict['lore'] = [dict(l) for l in lore] if lore else []
+        result.append(hook_dict)
+        
+    return jsonify(result)
+
+# --- TTRPG API ---
+@app.route('/api/ttrpg/query', methods=['GET'])
+def ttrpg_query():
+    loc_type = request.args.get('location_type', 'Burg')
+    loc_id = request.args.get('location_id', 1, type=int)
+    sector_idx = request.args.get('sector_index', 1, type=int)
+    
+    # Generate map dynamically if it doesn't exist
+    command_parser.generate_local_map(loc_type, loc_id, sector_idx)
+    
+    # Get state
+    state = command_parser.query_local_state(loc_type, loc_id, sector_idx)
+    return jsonify(state)
+
+@app.route('/api/ttrpg/roll', methods=['POST'])
+def ttrpg_roll():
+    data = request.json
+    paragon_id = data.get('paragon_id')
+    stat = data.get('stat', 'might')
+    difficulty = data.get('difficulty', 10)
+    
+    result = command_parser.roll_dice(paragon_id, stat, difficulty)
+    return jsonify(result)
+
+@app.route('/api/ttrpg/action', methods=['POST'])
+def ttrpg_action():
+    data = request.json
+    actor_id = data.get('actor_id')
+    action_type = data.get('action_type')
+    target_id = data.get('target_id')
+    kwargs = data.get('kwargs', {})
+    
+    result = command_parser.execute_action(actor_id, action_type, target_id, **kwargs)
+    return jsonify(result)
+
+@app.route('/static/geojson/<path:filename>')
+def serve_geojson(filename):
+    # Serve GeoJSON from the data directory
+    return send_from_directory('data', filename)
 
 @app.route('/api/db_query', methods=['POST'])
 def db_query():
