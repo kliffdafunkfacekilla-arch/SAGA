@@ -1,0 +1,20 @@
+,Guirilla,Meridian Chain,Ursine,Heartlands,Sylvania,Relience,Eastern Hounds,Iron Caladra,Sumpkin,Theocracy,Canopy,Scute,Hive,Dusk Husk,Avian,Prism,Vaneer,RiverFolk,Flower Valley
+Guirilla,x,Neutral,Suspicion,Suspicion,Neutral,Suspicion,Suspicion,Suspicion,Suspicion,Suspicion,Suspicion,Suspicion,Suspicion,Suspicion,Suspicion,Suspicion,Suspicion,Suspicion,Suspicion
+Meridian Chain,Neutral,x,Neutral,Friendly,Neutral,Neutral,Rival,Friendly,Suspicion,Rival,Friendly,Suspicion,Friendly,Friendly,Neutral,Friendly,Suspicion,Rival,Friendly
+Ursine,Suspicion,Neutral,x,Friendly,Neutral,Ally,Neutral,Suspicion,Suspicion,Suspicion,Neutral,Neutral,Neutral,Neutral,Rival,Neutral,Rival,Friendly,Neutral
+Heartlands,Suspicion,Friendly,Friendly,x,Neutral,Neutral,Neutral,Friendly,Neutral,Neutral,Neutral,Neutral,Neutral,Neutral,Suspicion,Neutral,Suspicion,Ally,Neutral
+Sylvania,Neutral,Neutral,Neutral,Neutral,x,Neutral,Neutral,Neutral,Neutral,Neutral,Neutral,Rival,Neutral,Neutral,Neutral,Neutral,Neutral,Neutral,Neutral
+Relience,Suspicion,Neutral,Ally,Neutral,Neutral,x,x,x,x,x,x,x,x,x,x,x,x,x,x
+Eastern Hounds,Suspicion,Rival,Neutral,Neutral,Neutral,x,x,x,x,x,Rival,x,x,x,Suspicion,x,x,x,x
+Iron Caladra,Suspicion,Friendly,Suspicion,Friendly,Neutral,x,x,x,Suspicion,x,x,x,x,x,x,x,x,x,x
+Sumpkin,Suspicion,Suspicion,Suspicion,Neutral,Neutral,x,x,Suspicion,x,Rival,x,x,x,x,Rival,x,x,Rival,x
+Theocracy,Suspicion,Rival,Suspicion,Neutral,Neutral,x,x,x,Rival,x,x,x,x,x,x,x,x,x,x
+Canopy,Suspicion,Friendly,Neutral,Neutral,Neutral,x,Rival,x,x,x,x,x,x,x,x,x,x,x,x
+Scute,Suspicion,Suspicion,Neutral,Neutral,Rival,x,x,x,x,x,x,x,x,x,Rival,x,x,Rival,x
+Hive,Suspicion,Friendly,Neutral,Neutral,Neutral,x,x,x,x,x,x,x,x,x,x,x,x,x,x
+Dusk Husk,Suspicion,Friendly,Neutral,Neutral,Neutral,x,x,x,x,x,x,x,x,x,x,x,x,x,x
+Avian,Suspicion,Neutral,Rival,Suspicion,Neutral,x,Suspicion,x,Rival,x,x,Rival,x,x,x,x,x,x,x
+Prism,Suspicion,Friendly,Neutral,Neutral,Neutral,x,x,x,x,x,x,x,x,x,x,x,x,x,x
+Vaneer,Suspicion,Suspicion,Rival,Suspicion,Neutral,x,x,x,x,x,x,x,x,x,x,x,x,x,x
+RiverFolk,Suspicion,Rival,Friendly,Ally,Neutral,x,x,x,Rival,x,x,Rival,x,x,x,x,x,x,x
+Flower Valley,Suspicion,Friendly,Neutral,Neutral,Neutral,x,x,x,x,x,x,x,x,x,x,x,x,x,x

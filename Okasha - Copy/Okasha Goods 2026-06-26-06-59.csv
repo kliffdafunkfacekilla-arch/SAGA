@@ -1,0 +1,74 @@
+Id,Good,Color,Type,Tags,Value,Demand Coverage,Chance,Model,Cells,Produced,Stock
+1,Wood,#966F33,RAW,construction;fuel,1,construction:1;utilities:1,4,biome(5, 6, 7, 8, 9),397,20369,16252.33
+2,Stone,#979EA2,RAW,construction,2,construction:1,4,(minHeight(40) || (minHeight(20) && elevation())) && biome(1, 2, 3, 4),113,751,750.81
+3,Marble,#d6d0bf,RAW,construction;luxury,6,construction:0.5;luxury:0.5,1,minHeight(60) || (minHeight(30) && elevation()),97,254,254.05
+4,Iron,#5D686E,RAW,ore;military,3,,5,minHeight(60) || (biome(12) && nth(7)) || (minHeight(20) && nth(10)),285,2753,1427.02
+5,Copper,#b87333,RAW,ore,4,,2,minHeight(60) || (minHeight(30) && elevation()),202,459,375.03
+6,Tin,#454343,RAW,ore,4,,2,minHeight(60) || (minHeight(30) && elevation()),244,553,451.54
+7,Silver,#C0C0C0,RAW,ore;luxury,8,,2,minHeight(60) || (minHeight(30) && elevation()),221,512,7.95
+8,Gold,#ffd700,RAW,ore;luxury,15,,2,river() && minHeight(40),8,22,0.73
+9,Grain,#F5DEB3,RAW,food,1,food:1,4,minHabitability(20) && habitability(),512,19197,18665.17
+10,Cattle,#56b000,RAW,food,2,food:1,4,(biome(3, 4) && !elevation()) || (biome(6) && random(70)) || (biome(5) && nth(5)),192,3405,2601.38
+11,Fish,#7fcdff,RAW,food;aquatic,1,food:1,2,shore(-1) && (type("ocean", "freshwater", "salt") || (river() && shore(1, 2))),104,282,121.16
+12,Game,#c38a8a,RAW,food,2,food:1,3,biome(5, 6, 7, 8, 9),311,8762,5873.05
+13,Wine,#963e48,RAW,food;luxury,2,food:0.5;luxury:0.5,3,biome(6) || (biome(4) && random(50) && river()),97,7523,7026.85
+14,Olives,#BDBD7D,RAW,food,2,food:1,3,biome(6) || (biome(4) && random(50) && river()),101,6128,5189.53
+15,Honey,#DCBC66,RAW,food;preservative,2,food:0.5,3,biome(6, 8, 9),185,6794,6178.29
+16,Salt,#E5E4E5,RAW,preservative;mineral,2,utilities:1,3,shore(1) && type("salt", "dry") || (biome(1, 2) && random(70)) || (biome(12) && nth(10)),31,590,573.91
+17,Dates,#dbb2a3,RAW,food,2,food:1,2,biome(1),14,322,321.79
+18,Horses,#ba7447,RAW,supply;military,5,utilities:0.6;military:0.4,4,biome(3) || (biome(2) && nth(4)),62,893,889.92
+19,Elephants,#C5CACD,RAW,supply;military,7,utilities:0.2;military:0.8,2,biome(1, 3, 5, 7),125,342,342.4
+20,Camels,#C19A6B,RAW,supply;military,5,utilities:0.7;military:0.3,3,biome(1, 2),41,241,241.49
+21,Hemp,#069a06,RAW,clothing;naval,1,,3,biome(6, 7, 8),208,15326,14193.81
+22,Pearls,#EAE0C8,RAW,luxury;aquatic,13,luxury:0.6,2,shore(-1) && minTemp(18),77,186,110.26
+23,Gemstones,#e463e4,RAW,luxury;mineral,15,luxury:0.6,2,minHeight(60) || (minHeight(30) && elevation()),248,605,318.83
+24,Dyes,#fecdea,RAW,luxury,5,,1,shore(-1) || minHabitability(1),313,787,697.79
+25,Incense,#ebe5a7,RAW,luxury;ritual,10,luxury:1,2,biome(1, 7),43,154,103.28
+26,Silk,#e0f0f8,RAW,luxury;clothing,9,luxury:1,1,biome(7),10,35,34.65
+27,Spices,#e99c75,RAW,luxury,14,luxury:1,2,biome(7),26,123,123.45
+28,Amber,#e68200,RAW,luxury,7,luxury:0.5,2,shore(1) && biome(6, 7, 8, 9),32,148,132.69
+29,Furs,#8a5e51,RAW,clothing;luxury,4,luxury:0.5;utilities:0.3,2,biome(9) || (biome(10) && nth(2)) || (biome(6, 8) && nth(5)) || (biome(12) && nth(10)),35,3597,3479.91
+30,Sheep,#53b574,RAW,clothing,2,food:1,3,(biome(3, 4) && !elevation()) || (biome(6) && random(70)) || (biome(5) && nth(5)),114,1972,1744.15
+31,Slaves,#757575,RAW,supply,7,utilities:1,2,shore(1) && minHabitability(1) && !habitability(),66,97,96.98
+32,Tar,#727272,MFG,naval,3,utilities:0.4;military:0.1,0,,0,240,0
+33,Saltpeter,#e6e3e3,RAW,military;mineral,2,,3,biome(1, 2) || (minHeight(50) && random(20)),73,149,118.5
+34,Coal,#5a6a75,MFG;RAW,fuel,3,utilities:0.5,3,minHeight(40) || (minHeight(20) && elevation(25)),386,2633,13.09
+35,Oil,#565656,MFG;RAW,fuel,3,utilities:1,2,biome(1, 2, 10) || (shore(-1) && minTemp(18) && random(15)),35,77,64.14
+36,Mahogany,#a45a52,RAW,luxury,7,luxury:1,1,biome(5, 7) && random(50),14,45,45.48
+37,Whales,#7fcdff,RAW,food;aquatic;fuel,1,food:1;utilities:0.2,3,shore(-1) && type('ocean') && maxTemp(7),0,0,0
+38,Sugarcane,#7abf87,RAW,preservative;food,4,food:0.6;luxury:0.4,3,biome(7),50,217,216.56
+39,Tea,#d0f0c0,RAW,luxury,5,luxury:1,2,minHeight(40) && (biome(5) || (biome(7) || biome(8))),19,71,70.76
+40,Tobacco,#6D5843,RAW,luxury,5,luxury:1,1,random(20) && (biome(3) || (biome(5) || biome(6))),13,37,36.83
+41,Clay,#b07c60,RAW,mineral;construction,1,construction:1,5,minTemp(8) && (shore(1) || river()),410,1067,789.67
+42,White sand,#e6d69c,RAW,mineral,1,,4,minTemp(8) && (shore(1) || river()),322,885,151.23
+43,Leather,#8b5a2b,MFG,clothing;military,4,,0,,0,727,11.37
+44,Cloth,#e8e69c,MFG,clothing,4,utilities:0.2,0,,0,563,3.91
+45,Garments,#bd21ec,MFG,clothing,9,utilities:1,0,,0,36,36
+46,Ceramics,#c1440e,MFG,storage;construction,6,utilities:1,0,,0,278,268.21
+47,Glass,#a0c8e8,MFG,storage;construction,7,luxury:1,0,,0,734,265.4
+48,Ropes,#ba9773,MFG,naval;construction,4,utilities:1,0,,0,482,2
+49,Paper,#f5f5dc,MFG,ritual;educational,4,,0,,0,116,0.09
+50,Ink,#000000,MFG,ritual;educational,5,,0,,0,165,12.38
+51,Books,#deb887,MFG,ritual;educational,12,luxury:1,0,,0,305,304.55
+52,Sails,#ffffff,MFG,naval,7,military:1,0,,0,530,49.9
+53,Ships,#654321,MFG,naval,20,military:0.5,0,,0,472,472
+54,Boots,#654321,MFG,clothing;military,6,utilities:1,0,,0,214,213.67
+55,Harnesses,#a0522d,MFG,military,8,military:1,0,,0,283,283.11
+56,Barrels,#b46e3b,MFG,naval;storage,3,utilities:1,0,,0,452,0
+57,Bronze,#e46f21,MFG,military,9,,0,,0,292,6.76
+58,Tools,#808080,MFG,construction;military,17,utilities:1,0,,0,888,887.82
+59,Arms,#333333,MFG,military,22,military:1,0,,0,757,757.05
+60,Gunpowder,#b0c4de,MFG,military,10,military:2,0,,0,62,61.91
+61,Artillery,#cd7f32,MFG,military,21,military:1,0,,0,480,480.42
+62,Coins,#ffd700,MFG,currency,25,luxury:1,0,,0,178,177.65
+63,Jewelry,#34861b,MFG,luxury,34,luxury:1,0,,0,369,369.19
+64,Preserved food,#c2b280,MFG,food,4,food:1,0,,0,1504,1503.57
+65,Vinegar,#9b111e,MFG,food;preservative,2,utilities:0.5,0,,0,858,24.18
+66,Cheese,#f5e1a4,MFG,food,4,food:1,0,,0,642,642.18
+67,Beer,#fbb117,MFG,food,7,food:1,0,,0,452,452
+68,Liquor,#8a0303,MFG,food;luxury,9,luxury:1,0,,0,89,88.97
+69,Candles,#fffacd,MFG,luxury;ritual,8,utilities:0.5;luxury:0.5,0,,0,106,106.21
+70,Soap,#e0e4cc,MFG,luxury;ritual,5,utilities:0.4;luxury:0.6,0,,0,32,32.48
+71,Perfume,#ff69b4,MFG,luxury;ritual,18,luxury:2,0,,0,911,911.21
+72,dragon stone,#ff5959,,,100,utilities:5;construction:5;military:5;luxury:5,10,,0,330970,252795.97
+73,Blackstone,#ff5959,,,10,utilities:1;construction:2;military:2,1,,0,32426,32426.2

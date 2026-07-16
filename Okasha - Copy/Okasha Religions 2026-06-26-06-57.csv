@@ -1,0 +1,17 @@
+Id,Name,Color,Type,Form,Supreme Deity,Area km2,Believers,Origins,Potential,Expansionism
+18,The Night Watch,#664cbe,Folk,Mythos,"Black Rider",20972,9007,"The Frozen Heart, The Blind Spot",global,0.8
+19,Wreckless Motion,#5d652c,Folk,Worm Cult,"Sonic Scream",13437956,5641314,"",culture,0
+1,The Whisperers,#bc80bd,Cult,Worm Cult,"Sh'lar (The 13th Shadow)",271524092,173455847,"",culture,0
+2,Cult of the Crushed,#fdb462,Cult,Worm Cult,"Tiraton (The World-Weight)",11476780,7777538,"",state,0
+3,The Frozen Heart,#ffd295,Cult,Worm Cult,"Stagus (Unyielding Glazier)",13325060,6527793,"",global,0
+4,The Strangler,#495952,Cult,Worm Cult,"Vecelo (The Silent Echo)",19092948,8797997,"",culture,0
+5,Toxic Liquidity,#ccebc5,Cult,Worm Cult,"Aurgenas (Gilded Solvent)",8617140,5450453,"",culture,0
+6,True Smelt,#8dd3c7,Cult,Worm Cult,"Carulkem (The Furnace Eternal)",17853248,10262339,"",culture,0
+7,The Null-Equation,#82464f,Cult,Worm Cult,"Lophex (Geometric Void)",15875020,4823896,"",culture,0
+8,The Blind Spot,#93aa40,Cult,Worm Cult,"Opecten (The Mirror Lord)",16939692,7520668,"",culture,0
+9,The Rotting Vessel,#e0eb8d,Cult,Worm Cult,"Termhill (The Black Star)",8575000,5113825,"",culture,0
+10,Quicksilver Mother,#b3de69,Cult,Worm Cult,"Gavusrix (Fecund Plague)",12260388,3693908,"",culture,0
+11,Siren Song,#fff76f,Cult,Worm Cult,"Virantor (The Burning Soul)",26246164,11297191,"",global,0
+12,Cult of Identity,#d38082,Cult,Worm Cult,"Tyrustis (The Mad King)",19893412,11280741,"",culture,0
+13,Mandate of the Chain,#fb8072,Cult,Accidental Cult,"None",42336,45220,"",culture,0
+0,No religion,,,,"",78204,5195,"",,
