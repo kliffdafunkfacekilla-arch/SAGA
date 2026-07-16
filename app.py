@@ -49,9 +49,25 @@ def stats():
     shadows = query_db("SELECT name, type, treasury FROM shadow_factions WHERE type IN ('Guild', 'Cartel')")
     stats_data['shadows'] = [{"name": s["name"], "type": s["type"], "treasury": round(s["treasury"], 1)} for s in shadows] if shadows else []
     
-    # Map Data
-    burgs = query_db("SELECT name, morale, chaos_level, x_coord, y_coord FROM burgs")
+    # Map Data: Burgs
+    burgs = query_db("SELECT name, morale, chaos_level, x_coord, y_coord, current_weather FROM burgs")
     stats_data['map_burgs'] = [dict(b) for b in burgs] if burgs else []
+    
+    # Map Data: Zones
+    zones = query_db("SELECT name, type, x_coord, y_coord FROM zones WHERE x_coord != 0 AND y_coord != 0")
+    stats_data['map_zones'] = [dict(z) for z in zones] if zones else []
+    
+    # Map Data: Markers
+    markers = query_db("SELECT name, icon, x_coord, y_coord FROM markers")
+    stats_data['map_markers'] = [dict(m) for m in markers] if markers else []
+    
+    # Map Data: Prisons (Join with burgs to get coords since cell_id is burg_id)
+    map_prisons = query_db('''
+        SELECT p.name, p.containment_strength, b.x_coord, b.y_coord 
+        FROM world_prisons p
+        JOIN burgs b ON p.cell_id = b.id
+    ''')
+    stats_data['map_prisons'] = [dict(p) for p in map_prisons] if map_prisons else []
     
     return jsonify(stats_data)
 

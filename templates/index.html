@@ -185,7 +185,7 @@
                 document.getElementById('prisonsDisplay').innerHTML = prisonsHtml;
                 
                 // Map Rendering
-                renderMap(data.map_burgs);
+                renderMap(data);
             });
     }
     
@@ -198,10 +198,20 @@
         let colors = [];
         let sizes = [];
         
+        let weatherEmojis = {
+            'Clear': '☀️',
+            'Rain': '🌧️',
+            'Drought': '🏜️',
+            'Storm': '⛈️',
+            'Blizzard': '❄️',
+            'Aether Storm': '🔮'
+        };
+        
         burgs.forEach(b => {
             x.push(b.x_coord);
             y.push(b.y_coord);
-            text.push(`<b>${b.name}</b><br>Morale: ${b.morale.toFixed(1)}<br>Chaos: ${b.chaos_level.toFixed(1)}`);
+            let w_emoji = weatherEmojis[b.current_weather] || '☀️';
+            text.push(`<b>${b.name}</b> ${w_emoji}<br>Morale: ${b.morale.toFixed(1)}<br>Chaos: ${b.chaos_level.toFixed(1)}`);
             
             // Size based on chaos (if chaos > 0, it swells)
             sizes.push(10 + (b.chaos_level / 5));

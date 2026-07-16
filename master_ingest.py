@@ -63,8 +63,8 @@ def master_ingest(db_path, burgs_csv, goods_csv, states_csv, relations_csv, reli
                 x = float(row.get('X', 0))
                 y = float(row.get('Y', 0))
                 
-                # Burgs start with high morale, zero chaos
-                burg_rows.append((b_id, name, culture, pop, 100.0, 0.0, x, y))
+                # Burgs start with high morale, zero chaos, and Clear weather
+                burg_rows.append((b_id, name, culture, pop, 100.0, 0.0, x, y, 'Clear'))
                 burg_locations.append((b_id, x, y))
                 
                 if grain_id:
@@ -78,7 +78,7 @@ def master_ingest(db_path, burgs_csv, goods_csv, states_csv, relations_csv, reli
                         prod_rate = random.uniform(10.0, 100.0)
                         prod_rows.append((b_id, g_id, prod_rate))
                         
-            cursor.executemany("INSERT OR REPLACE INTO burgs (id, name, culture, population, morale, chaos_level, x_coord, y_coord) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", burg_rows)
+            cursor.executemany("INSERT OR REPLACE INTO burgs (id, name, culture, population, morale, chaos_level, x_coord, y_coord, current_weather) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", burg_rows)
             cursor.executemany("INSERT INTO burg_stocks (burg_id, good_id, food_type, stock, consumption) VALUES (?, ?, ?, ?, ?)", stock_rows)
             cursor.executemany("INSERT INTO burg_production (burg_id, good_id, production_rate) VALUES (?, ?, ?)", prod_rows)
 
@@ -153,21 +153,83 @@ def master_ingest(db_path, burgs_csv, goods_csv, states_csv, relations_csv, reli
                 presence_rows.append((f_id, b_id, influence, 1))
     cursor.executemany("INSERT OR REPLACE INTO shadow_presence (faction_id, burg_id, influence_level, hidden) VALUES (?, ?, ?, ?)", presence_rows)
 
+    # 6.5 INGEST GEOGRAPHY
+    print("Ingesting Geography...")
+    data_dir = "Okasha - Copy"
+    biomes_csv = os.path.join(data_dir, "Okasha Biomes 2026-06-26-07-00.csv")
+    if os.path.exists(biomes_csv):
+        with open(biomes_csv, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            b_rows = [(r["Id"], r["Biome"], r["Color"], r["Habitability"], r["Cells"], r["Area km2"], r["Population"]) for r in reader]
+            cursor.executemany("INSERT OR REPLACE INTO biomes VALUES (?, ?, ?, ?, ?, ?, ?)", b_rows)
+            
+    markers_csv = os.path.join(data_dir, "Okasha Markers 2026-06-26-06-57.csv")
+    if os.path.exists(markers_csv):
+        with open(markers_csv, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            m_rows = [(r["Id"], r["Name"], r["Type"], r["Icon"], r["X"], r["Y"], r["Latitude"], r["Longitude"], r["Note"]) for r in reader]
+            cursor.executemany("INSERT OR REPLACE INTO markers VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", m_rows)
+            
+    routes_csv = os.path.join(data_dir, "Okasha Routes 2026-06-26-06-57.csv")
+    if os.path.exists(routes_csv):
+        with open(routes_csv, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            rt_rows = [(r["Id"], r["Route"], r["Group"], r["Length"].replace(" km", "")) for r in reader]
+            cursor.executemany("INSERT OR REPLACE INTO routes VALUES (?, ?, ?, ?)", rt_rows)
+            
+    rivers_csv = os.path.join(data_dir, "Okasha Rivers 2026-06-26-06-59.csv")
+    if os.path.exists(rivers_csv):
+        with open(rivers_csv, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            rv_rows = [(r["Id"], r["River"], r["Length"].replace(" km", "")) for r in reader]
+            cursor.executemany("INSERT OR REPLACE INTO rivers VALUES (?, ?, ?)", rv_rows)
+            
+    zones_csv = os.path.join(data_dir, "Okasha Zones 2026-06-26-06-57.csv")
+    zone_centers = {} # mapping id to x, y
+    if os.path.exists(zones_csv):
+        import json
+        geojson_zones = os.path.join(data_dir, "Okasha Zones 2026-06-26-06-53.geojson")
+        if os.path.exists(geojson_zones):
+            with open(geojson_zones, "r", encoding="utf-8") as gf:
+                z_data = json.load(gf)
+                for feature in z_data["features"]:
+                    zid = feature["properties"]["id"]
+                    coords = feature["geometry"]["coordinates"]
+                    if feature["geometry"]["type"] == "MultiPolygon":
+                        cx, cy = coords[0][0][0]
+                    else:
+                        cx, cy = coords[0][0]
+                    zone_centers[str(zid)] = (cx, cy)
+                    
+        with open(zones_csv, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            z_rows = []
+            for r in reader:
+                cx, cy = zone_centers.get(r["Id"], (0,0))
+                z_rows.append((r["Id"], r["Description"], r["Type"], r["Cells"], cx, cy))
+            cursor.executemany("INSERT OR REPLACE INTO zones VALUES (?, ?, ?, ?, ?, ?)", z_rows)
+
     # 7. INGEST CHAOS LAYER (Prisons, Wardens, Cults)
-    prisons = [
-        (1, "The First Prison", 10000.0, 0.0, 10),
-        (2, "The Abyssal Seal", 10000.0, 0.0, 20),
-        (3, "The Crimson Vault", 10000.0, 0.0, 30),
-        (4, "The Iron Cage", 10000.0, 0.0, 40),
-        (5, "The Weeping Stone", 10000.0, 0.0, 50),
-        (6, "The Obsidian Tomb", 10000.0, 0.0, 60),
-        (7, "The Frozen Lock", 10000.0, 0.0, 70),
-        (8, "The Emerald Chain", 10000.0, 0.0, 80),
-        (9, "The Silent Cage", 10000.0, 0.0, 90),
-        (10, "The Shadow Bind", 10000.0, 0.0, 100),
-        (11, "The Gilded Prison", 10000.0, 0.0, 110),
-        (12, "The Final Lock", 10000.0, 0.0, 120),
+    prison_names = [
+        "The First Prison", "The Abyssal Seal", "The Crimson Vault", "The Iron Cage", 
+        "The Weeping Stone", "The Obsidian Tomb", "The Frozen Lock", "The Emerald Chain", 
+        "The Silent Cage", "The Shadow Bind", "The Gilded Prison", "The Final Lock"
     ]
+    cursor.execute("SELECT id, x_coord, y_coord FROM zones WHERE type != 'Worm Cult' LIMIT 8")
+    chaos_zones = cursor.fetchall()
+    
+    cursor.execute("SELECT id, name FROM burgs")
+    all_b = cursor.fetchall()
+    
+    prisons = []
+    for i, name in enumerate(prison_names):
+        if i < len(chaos_zones):
+            b = random.choice(all_b)
+            prisons.append((i+1, name, 10000.0, 0.0, b[0]))
+        else:
+            b = random.choice(all_b)
+            prisons.append((i+1, name, 10000.0, 0.0, b[0]))
+            
     cursor.executemany("INSERT OR REPLACE INTO world_prisons (prison_id, name, containment_strength, chaos_pressure, cell_id) VALUES (?, ?, ?, ?, ?)", prisons)
 
     warden_rows = []

@@ -26,6 +26,29 @@ def run_world_tick(db_path):
     row = cursor.fetchone()
     aether = row[0] if row else 'Low'
     
+    # 1.5 METEOROLOGY (Weather Phase)
+    print("Simulating Weather...")
+    cursor.execute("SELECT id, name, chaos_level FROM burgs")
+    burgs_for_weather = cursor.fetchall()
+    weather_states = ['Clear', 'Rain', 'Drought', 'Storm', 'Blizzard']
+    weather_weights = [0.60, 0.15, 0.10, 0.12, 0.03]
+    
+    for b in burgs_for_weather:
+        b_id, b_name, b_chaos = b
+        new_weather = random.choices(weather_states, weights=weather_weights, k=1)[0]
+        
+        # Chaos Infusion Logic: Storms in chaos zones have a chance to become Aether Storms
+        if new_weather in ['Storm', 'Blizzard'] and b_chaos > 10.0:
+            if random.random() < 0.2: # 20% chance
+                new_weather = 'Aether Storm'
+                
+        cursor.execute("UPDATE burgs SET current_weather = ? WHERE id = ?", (new_weather, b_id))
+        
+        # Immediate extreme effects
+        if new_weather == 'Aether Storm':
+            print(f"  *** AETHER STORM hits {b_name} (Chaos Zone)! Chaos spikes!")
+            cursor.execute("UPDATE burgs SET chaos_level = min(100.0, chaos_level + 10.0), morale = max(0.0, morale - 10.0) WHERE id = ?", (b_id,))
+            
     # 2. Simulate Ecology
     print("Simulating Ecology...")
     modifier = 1.5 if aether == 'High' else 0.5
@@ -71,22 +94,46 @@ def run_world_tick(db_path):
         WHERE chaos_level > 10.0
     """)
     
-    # Get Mayors to buff production (Logic instead of Stewardship)
-    cursor.execute("SELECT location_id, logic, flaw_1, flaw_2 FROM paragons WHERE role = 'Mayor'")
-    mayors = {row[0]: (row[1], row[2], row[3]) for row in cursor.fetchall()}
+    # Get Mayors to buff production (Logic instead of Stewardship) and mitigate weather (Knowledge)
+    cursor.execute("SELECT location_id, logic, knowledge, intuition, flaw_1, flaw_2 FROM paragons WHERE role = 'Mayor'")
+    mayors = {row[0]: (row[1], row[2], row[3], row[4], row[5]) for row in cursor.fetchall()}
+    
+    # Get current weather for all burgs
+    cursor.execute("SELECT id, current_weather FROM burgs")
+    burg_weather = {row[0]: row[1] for row in cursor.fetchall()}
     
     # Calculate production buffs
     cursor.execute("SELECT burg_id, good_id, production_rate FROM burg_production")
     prod_rows = cursor.fetchall()
     for prow in prod_rows:
         b_id, g_id, base_rate = prow
-        m_data = mayors.get(b_id, (10, "", ""))
+        m_data = mayors.get(b_id, (10, 10, 10, "", ""))
         logic = m_data[0]
-        flaws = [m_data[1], m_data[2]]
+        knowledge = m_data[1]
+        intuition = m_data[2]
+        flaws = [m_data[3], m_data[4]]
+        weather = burg_weather.get(b_id, 'Clear')
         
         modifier = 1.0 + ((logic - 10) * 0.05) # +/- 5% per point from 10
         if "Corrupt" in flaws:
             modifier -= 0.1 # Corrupt mayors skim 10% off the top
+            
+        # Apply weather modifiers
+        weather_penalty = 0.0
+        if weather == 'Rain' and g_id == 1: # Assuming 1 is Grain
+            modifier += 0.2
+        elif weather == 'Drought' and g_id == 1:
+            weather_penalty = 0.5
+        elif weather in ['Storm', 'Blizzard']:
+            weather_penalty = 0.3
+        elif weather == 'Aether Storm':
+            weather_penalty = 0.5
+            
+        # Mayor mitigates weather penalties with Knowledge and Intuition
+        if weather_penalty > 0:
+            mitigation = ((knowledge - 10) * 0.02) + ((intuition - 10) * 0.02)
+            actual_penalty = max(0.0, weather_penalty - max(0.0, mitigation))
+            modifier -= actual_penalty
             
         actual_rate = max(0.0, base_rate * modifier)
         cursor.execute("UPDATE burg_stocks SET stock = stock + ? WHERE burg_id = ? AND good_id = ?", (actual_rate, b_id, g_id))

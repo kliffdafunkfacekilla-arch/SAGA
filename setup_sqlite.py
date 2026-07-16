@@ -105,6 +105,62 @@ def setup_database():
     
     # 5. INTEGRATED REALITY: Foundations
     cursor.execute('''
+        CREATE TABLE IF NOT EXISTS biomes (
+            id INTEGER PRIMARY KEY,
+            name TEXT,
+            color TEXT,
+            habitability TEXT,
+            cells INTEGER,
+            area_km2 REAL,
+            population INTEGER
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS zones (
+            id INTEGER PRIMARY KEY,
+            name TEXT,
+            type TEXT,
+            cells INTEGER,
+            x_coord REAL,
+            y_coord REAL,
+            lat REAL,
+            lon REAL
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS markers (
+            id INTEGER PRIMARY KEY,
+            name TEXT,
+            type TEXT,
+            icon TEXT,
+            x_coord REAL,
+            y_coord REAL,
+            lat REAL,
+            lon REAL,
+            note TEXT
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS routes (
+            id INTEGER PRIMARY KEY,
+            name TEXT,
+            type TEXT,
+            length_km REAL
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS rivers (
+            id INTEGER PRIMARY KEY,
+            name TEXT,
+            length_km REAL
+        )
+    ''')
+
+    cursor.execute('''
     CREATE TABLE IF NOT EXISTS burgs (
         id INTEGER PRIMARY KEY,
         name TEXT,
@@ -113,7 +169,10 @@ def setup_database():
         morale REAL DEFAULT 100.0,
         chaos_level REAL DEFAULT 0.0,
         x_coord REAL,
-        y_coord REAL
+        y_coord REAL,
+        lat REAL,
+        lon REAL,
+        current_weather TEXT DEFAULT 'Clear'
     );
     ''')
     
