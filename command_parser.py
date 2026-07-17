@@ -2,8 +2,28 @@ import sqlite3
 import random
 import json
 import narrative_engine
+import math
 
 DB_PATH = 'okasha_world.db'
+
+def calculate_gear_tax(inventory_list):
+    """
+    Calculates total weight of inventory and returns the Loadout classification.
+    Light: <= 3 weight
+    Medium: 4-7 weight
+    Heavy: 8+ weight
+    """
+    total_weight = 0
+    for item in inventory_list:
+        if isinstance(item, dict) and 'weight' in item:
+            total_weight += int(item['weight'])
+            
+    if total_weight <= 3:
+        return "Light"
+    elif total_weight <= 7:
+        return "Medium"
+    else:
+        return "Heavy"
 
 def get_db():
     return sqlite3.connect(DB_PATH)
@@ -186,6 +206,54 @@ def query_local_state(location_type, location_id, sector_index=1):
     conn.close()
     return state
 
+def create_character(name, origin, skill):
+    """
+    Creates a new Player Character with BRUTAL stats.
+    """
+    conn = sqlite3.connect('okasha_world.db')
+    c = conn.cursor()
+    
+    # 3d6 for core stats
+    stats = {
+        'might': sum(random.randint(1, 6) for _ in range(3)),
+        'endurance': sum(random.randint(1, 6) for _ in range(3)),
+        'finesse': sum(random.randint(1, 6) for _ in range(3)),
+        'reflex': sum(random.randint(1, 6) for _ in range(3)),
+        'vitality': sum(random.randint(1, 6) for _ in range(3)),
+        'fortitude': sum(random.randint(1, 6) for _ in range(3)),
+        'knowledge': sum(random.randint(1, 6) for _ in range(3)),
+        'logic': sum(random.randint(1, 6) for _ in range(3)),
+        'awareness': sum(random.randint(1, 6) for _ in range(3)),
+        'intuition': sum(random.randint(1, 6) for _ in range(3)),
+        'charm': sum(random.randint(1, 6) for _ in range(3)),
+        'willpower': sum(random.randint(1, 6) for _ in range(3))
+    }
+    
+    # BRUTAL Stats Calculation
+    health = stats['endurance'] + stats['fortitude'] + stats['vitality']
+    composure = stats['willpower'] + stats['logic'] + stats['charm']
+    stamina = stats['might'] + stats['reflex'] + stats['finesse']
+    focus = stats['knowledge'] + stats['awareness'] + stats['intuition']
+    
+    c.execute('''
+        INSERT INTO player_characters (name, origin, loadout, health, max_health, 
+                              composure, max_composure, stamina, max_stamina, focus, max_focus,
+                              level, xp, shards, inventory, skills,
+                              might, endurance, finesse, reflex, vitality, fortitude,
+                              knowledge, logic, awareness, intuition, charm, willpower,
+                              trait_1, flaw_1, location_id, sector_index, local_x, local_y)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0, '[]', ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                'Determined', 'Reckless', 1, 13, 50, 50)
+    ''', (name, origin, 'Light', health, health, composure, composure, stamina, stamina, focus, focus, json.dumps([skill]),
+          stats['might'], stats['endurance'], stats['finesse'], stats['reflex'], stats['vitality'], stats['fortitude'],
+          stats['knowledge'], stats['logic'], stats['awareness'], stats['intuition'], stats['charm'], stats['willpower']))
+          
+    char_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return {"status": "success", "character_id": char_id, "name": name, "stats": stats, "derived": {"hp": health, "stamina": stamina, "focus": focus}}
+
 def roll_dice(paragon_id, stat_name, difficulty):
     """
     Pulls a stat from a Paragon, rolls a d20 + modifier, compares to difficulty.
@@ -299,6 +367,117 @@ def execute_action(actor_id, action_type, target_id=None, **kwargs):
         amount = kwargs.get('amount', 1.0)
         c.execute("UPDATE burgs SET chaos_level = chaos_level + ? WHERE id = ?", (amount, target_id))
         result['message'] = f"Burg {target_id} chaos altered by {amount}"
+        
+    elif action_type == 'SPAWN_ENTITY':
+        # DM injects a new entity into the world
+        sector_id = kwargs.get('sector_id')
+        x = kwargs.get('x', 50)
+        y = kwargs.get('y', 50)
+        entity_type = kwargs.get('entity_type', 'NPC')
+        details = kwargs.get('details', {})
+        
+        c.execute('''
+            INSERT INTO map_deltas (sector_id, local_x, local_y, change_type, details)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (sector_id, x, y, entity_type, json.dumps(details)))
+        result['message'] = f"DM spawned {entity_type} at ({x}, {y}) in sector {sector_id}"
+    elif action_type == 'TAKE_DAMAGE':
+        amount = kwargs.get('amount', 0)
+        c.execute("UPDATE player_characters SET health = health - ? WHERE id = ?", (amount, target_id))
+        c.execute("SELECT health FROM player_characters WHERE id = ?", (target_id,))
+        new_health = c.fetchone()[0]
+        result['message'] = f"PC {target_id} took {amount} damage. Health is now {new_health}."
+        if new_health <= 0:
+            result['message'] += " PC has fallen!"
+            
+    elif action_type == 'LOOT_ITEM':
+        item = kwargs.get('item', {})
+        # Fallback if string is passed
+        if isinstance(item, str):
+            try:
+                item = json.loads(item.replace("'", '"'))
+            except Exception:
+                item = {"name": item, "weight": 1}
+                
+        c.execute("SELECT inventory FROM player_characters WHERE id = ?", (target_id,))
+        row = c.fetchone()
+        inv = json.loads(row[0]) if row and row[0] else []
+        inv.append(item)
+        
+        loadout = calculate_gear_tax(inv)
+        
+        c.execute("UPDATE player_characters SET inventory = ?, loadout = ? WHERE id = ?", (json.dumps(inv), loadout, target_id))
+        result['message'] = f"PC {target_id} looted {item.get('name', 'Item')}. Current Loadout: {loadout}."
+        
+    elif action_type == 'TRANSACT':
+        amount = kwargs.get('amount', 0)
+        c.execute("UPDATE player_characters SET shards = shards + ? WHERE id = ?", (amount, target_id))
+        c.execute("SELECT shards FROM player_characters WHERE id = ?", (target_id,))
+        new_shards = c.fetchone()[0]
+        result['message'] = f"PC {target_id} transacted {amount} shards. New balance: {new_shards}."
+        
+    elif action_type == 'GAIN_XP':
+        amount = kwargs.get('amount', 0)
+        c.execute("UPDATE player_characters SET xp = xp + ? WHERE id = ?", (amount, target_id))
+        c.execute("SELECT xp FROM player_characters WHERE id = ?", (target_id,))
+        new_xp = c.fetchone()[0]
+        result['message'] = f"PC {target_id} gained {amount} XP. Total: {new_xp}."
+        if new_xp >= 100:
+            result['message'] += " Player is ready to LEVEL UP!"
+            
+    elif action_type == 'LEVEL_UP':
+        stat_increase = kwargs.get('stat_increase', 'might').lower()
+        new_skill = kwargs.get('new_skill', '')
+        
+        # We need to dynamically update the stat
+        valid_stats = ['might', 'endurance', 'finesse', 'reflex', 'vitality', 'fortitude', 
+                       'knowledge', 'logic', 'awareness', 'intuition', 'charm', 'willpower']
+        
+        if stat_increase in valid_stats:
+            c.execute(f"UPDATE player_characters SET {stat_increase} = {stat_increase} + 1, level = level + 1, xp = xp - 100 WHERE id = ?", (target_id,))
+        else:
+            c.execute("UPDATE player_characters SET level = level + 1, xp = xp - 100 WHERE id = ?", (target_id,))
+            
+        c.execute("SELECT skills FROM player_characters WHERE id = ?", (target_id,))
+        row = c.fetchone()
+        skills = json.loads(row[0]) if row and row[0] else []
+        if new_skill:
+            skills.append(new_skill)
+            c.execute("UPDATE player_characters SET skills = ? WHERE id = ?", (json.dumps(skills), target_id))
+            
+        result['message'] = f"PC {target_id} Leveled Up! Increased {stat_increase.capitalize()} and learned {new_skill}."
+        
+    elif action_type == 'SET_LOCATION':
+        import math
+        x = kwargs.get('x', 50)
+        y = kwargs.get('y', 50)
+        c.execute("SELECT local_x, local_y, reflex FROM player_characters WHERE id = ?", (target_id,))
+        row = c.fetchone()
+        if row:
+            old_x, old_y, reflex = row
+            max_dist = 5 + (reflex // 2)
+            dist = math.dist((old_x, old_y), (x, y))
+            if dist > max_dist:
+                result['status'] = 'error'
+                result['message'] = f"Target is {dist:.1f} tiles away. You can only move {max_dist} tiles per Beat."
+            else:
+                c.execute("UPDATE player_characters SET local_x = ?, local_y = ? WHERE id = ?", (x, y, target_id))
+                result['message'] = f"PC {target_id} moved to ({x}, {y})."
+        else:
+            result['status'] = 'error'
+            result['message'] = 'PC not found.'
+            
+    elif action_type == 'TICK_WORLD':
+        import engine
+        import ai_director
+        engine.run_world_tick('okasha_world.db')
+        
+        # Trigger the AI Director after the mechanical simulation ticks
+        # (Defaulting to player 1 for now)
+        director_res = ai_director.pulse_scene(1, action_context="The simulation just advanced one beat based on the player's recent actions.", db_path='okasha_world.db')
+        narrative = director_res.get('narrative', '')
+        
+        result['message'] = f"DM advanced the global clock. World simulated 1 interval.\n\nAI Director: {narrative}"
         
     else:
         result = {"status": "error", "message": "Unknown action type"}

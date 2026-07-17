@@ -1,10 +1,16 @@
 from flask import Flask, render_template, jsonify, request, send_from_directory
+from flask_cors import CORS
 import sqlite3
 import os
 import subprocess
 import command_parser
+import llm_gm
+import engine
+import ai_director
+import narrative_engine
 
 app = Flask(__name__)
+CORS(app)
 DB_PATH = 'okasha_world.db'
 
 def query_db(query, args=(), one=False):
@@ -113,6 +119,16 @@ def ttrpg_query():
     state = command_parser.query_local_state(loc_type, loc_id, sector_idx)
     return jsonify(state)
 
+@app.route('/api/ttrpg/create_character', methods=['POST'])
+def ttrpg_create_character():
+    data = request.json
+    name = data.get('name', 'Unknown')
+    origin = data.get('origin', 'Core-born')
+    char_class = data.get('class', 'Wanderer')
+    
+    result = command_parser.create_character(name, origin, char_class)
+    return jsonify(result)
+
 @app.route('/api/ttrpg/roll', methods=['POST'])
 def ttrpg_roll():
     data = request.json
@@ -174,6 +190,31 @@ def run_tick():
         return jsonify({"status": "success", "output": result.stdout})
     except subprocess.CalledProcessError as e:
         return jsonify({"status": "error", "output": e.stdout + "\n" + e.stderr}), 500
+
+@app.route('/api/ttrpg/chat', methods=['POST'])
+def ttrpg_chat():
+    data = request.json
+    player_id = data.get('player_id', 1)
+    message = data.get('message', '')
+    
+    # LLM acts purely as an intent parser; state validation happens in the rules engine.
+    state = {}
+    
+    result = llm_gm.chat_with_gm(player_id, message, state)
+    return jsonify(result)
+
+@app.route('/api/ttrpg/director_pulse', methods=['POST'])
+def director_pulse():
+    data = request.json
+    player_id = data.get('player_id', 1)
+    
+    result = ai_director.pulse_scene(player_id, DB_PATH)
+    return jsonify(result)
+
+@app.route('/api/ttrpg/tick', methods=['POST'])
+def ttrpg_tick():
+    engine.run_world_tick(DB_PATH)
+    return jsonify({"status": "success", "message": "World Engine ticked forward 1 interval."})
 
 if __name__ == '__main__':
     # Ensure templates dir exists

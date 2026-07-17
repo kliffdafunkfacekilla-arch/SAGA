@@ -353,14 +353,51 @@ def setup_database():
     );
     ''')
     
-    # 11. THE PARAGON SYSTEM (Character-Driven Sim)
+    # 11. THE PARAGON SYSTEM    # Player Characters (BRUTAL PCs)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS player_characters (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            origin TEXT NOT NULL,
+            loadout TEXT NOT NULL,
+            health INTEGER, max_health INTEGER,
+            composure INTEGER, max_composure INTEGER,
+            stamina INTEGER, max_stamina INTEGER,
+            focus INTEGER, max_focus INTEGER,
+            level INTEGER DEFAULT 1, xp INTEGER DEFAULT 0, shards INTEGER DEFAULT 0,
+            inventory TEXT DEFAULT '[]', skills TEXT DEFAULT '[]',
+            might INTEGER, endurance INTEGER, finesse INTEGER, reflex INTEGER, vitality INTEGER, fortitude INTEGER,
+            knowledge INTEGER, logic INTEGER, awareness INTEGER, intuition INTEGER, charm INTEGER, willpower INTEGER,
+            trait_1 TEXT, flaw_1 TEXT,
+            location_id INTEGER, sector_index INTEGER, local_x INTEGER, local_y INTEGER
+        )
+    ''')
+
+    # Paragons (Elite NPCs/Entities)
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS paragons (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
         role TEXT,
         location_id INTEGER,
+        sector_index INTEGER DEFAULT 1,
+        local_x INTEGER DEFAULT 50,
+        local_y INTEGER DEFAULT 50,
         faction_name TEXT,
+        health INTEGER DEFAULT 20,
+        max_health INTEGER DEFAULT 20,
+        composure INTEGER DEFAULT 10,
+        max_composure INTEGER DEFAULT 10,
+        stamina INTEGER DEFAULT 10,
+        max_stamina INTEGER DEFAULT 10,
+        focus INTEGER DEFAULT 10,
+        max_focus INTEGER DEFAULT 10,
+        level INTEGER DEFAULT 1,
+        xp INTEGER DEFAULT 0,
+        origin TEXT DEFAULT 'Core-born',
+        class TEXT DEFAULT 'Wanderer',
+        inventory TEXT DEFAULT '[]',
+        skills TEXT DEFAULT '[]',
         might INTEGER DEFAULT 10,
         endurance INTEGER DEFAULT 10,
         finesse INTEGER DEFAULT 10,
