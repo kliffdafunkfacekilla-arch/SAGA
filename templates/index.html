@@ -3,338 +3,328 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ostraka Visual Maintenance Tool</title>
-    <!-- Use a dark, premium theme via Bootstrap -->
+    <title>B.R.U.T.A.L. Engine TTRPG</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
     <style>
-        body {
-            background-color: #121212;
-            color: #e0e0e0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        .card {
-            background-color: #1e1e1e;
-            border: 1px solid #333;
-            margin-bottom: 20px;
-        }
-        .card-header {
-            background-color: #2c2c2c;
-            border-bottom: 1px solid #444;
-            font-weight: bold;
-            color: #fff;
-        }
-        .text-danger { color: #ff4d4d !important; }
-        .text-success { color: #00cc66 !important; }
-        .text-warning { color: #ffcc00 !important; }
+        body { background-color: #0d0d0d; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
+        .card { background-color: #1a1a1a; border: 1px solid #333; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.5); }
+        .card-header { background-color: #252525; border-bottom: 1px solid #444; font-weight: bold; color: #fff; text-transform: uppercase; letter-spacing: 1px; }
+        .text-neon { color: #00ffcc; }
+        #chatOutput { background-color: #000; color: #b3b3b3; font-family: monospace; height: 350px; overflow-y: auto; padding: 15px; border: 1px solid #333; font-size: 14px;}
+        .llm-narrative { color: #d4af37; font-style: italic; margin-bottom: 10px; }
+        .system-math { color: #00ffcc; font-size: 0.9em; margin-bottom: 5px; }
+        .player-msg { color: #ffffff; font-weight: bold; margin-bottom: 5px; }
         
-        #logOutput {
-            background-color: #000;
-            color: #0f0;
-            font-family: monospace;
-            padding: 10px;
-            height: 200px;
-            overflow-y: scroll;
-            border: 1px solid #333;
+        #battlemapContainer { 
+            width: 100%; 
+            background-color: #000; 
+            border: 1px solid #444; 
+            padding: 5px;
+            display: flex;
+            justify-content: center;
+        }
+        canvas {
+            image-rendering: pixelated;
+            border: 1px solid #222;
         }
         
-        #mapContainer {
-            height: 500px;
-            width: 100%;
-            background-color: #111;
-            border: 1px solid #333;
-        }
-        
-        .progress {
-            background-color: #333;
-            height: 15px;
-        }
-        
-        .modal-content {
-            background-color: #1e1e1e;
-            color: #eee;
-        }
-        .modal-header { border-bottom: 1px solid #444; }
-        .modal-footer { border-top: 1px solid #444; }
+        .stat-box { text-align: center; background: #222; padding: 5px; border: 1px solid #444; border-radius: 4px; }
+        .stat-val { font-size: 1.2rem; font-weight: bold; }
     </style>
 </head>
 <body>
-
 <div class="container-fluid mt-3">
-    <h1 class="mb-3 text-center">Ostraka World Engine</h1>
-    
+    <h2 class="mb-3 text-center" style="font-family: Georgia, serif; color: #d4af37; text-shadow: 0 0 10px rgba(212,175,55,0.3);">OSTRAKA: DESPERATE NEGOTIATION</h2>
     <div class="row">
-        <!-- Controls & Global Stats -->
-        <div class="col-md-3">
+        
+        <!-- Left Column: Map & Chat -->
+        <div class="col-lg-8">
             <div class="card">
-                <div class="card-header">God-Mode Controls</div>
-                <div class="card-body text-center">
-                    <button class="btn btn-primary w-100 mb-2" onclick="runTick()">⚙️ RUN ENGINE TICK</button>
-                    
-                    <label class="mt-2 text-start w-100"><small>Induce Famine (Faction):</small></label>
-                    <input type="text" id="famineInput" class="form-control mb-2 form-control-sm" placeholder="e.g. Heartlands">
-                    <button class="btn btn-danger w-100 btn-sm mb-3" onclick="runTickWithFamine()">💀 TRIGGER FAMINE & TICK</button>
-                    
-                    <hr class="border-secondary">
-                    <button class="btn btn-warning w-100" data-bs-toggle="modal" data-bs-target="#dbEditorModal">🛠️ UNIVERSAL DB EDITOR</button>
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span id="sectorLabel">Sector 1 - Local Battlemap (100x100)</span>
+                </div>
+                <div class="card-body p-0">
+                    <div id="battlemapContainer">
+                        <canvas id="battlemapCanvas" width="600" height="600"></canvas>
+                    </div>
                 </div>
             </div>
             
             <div class="card">
-                <div class="card-header">Global Simulation State</div>
-                <div class="card-body">
-                    <h5 id="tickDisplay">Tick: 0</h5>
-                    <p class="mb-1">Average Morale: <span id="moraleDisplay" class="fw-bold">0</span></p>
-                    <p class="mb-1">Global Chaos Level: <span id="chaosDisplay" class="fw-bold">0</span></p>
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>AI Facilitator Terminal</span>
+                    <span id="loadingSpinner" style="display:none;" class="spinner-border spinner-border-sm text-warning" role="status"></span>
                 </div>
-            </div>
-            
-            <div class="card">
-                <div class="card-header">Engine Output Logs</div>
                 <div class="card-body p-0">
-                    <div id="logOutput">Ready...</div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Map -->
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">Visual Map (Chaos Infection)</div>
-                <div class="card-body p-0">
-                    <div id="mapContainer"></div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Prisons -->
-        <div class="col-md-3">
-            <div class="card">
-                <div class="card-header">The 12 Dragonstone Prisons</div>
-                <div class="card-body">
-                    <div id="prisonsDisplay" class="row">
-                        <!-- Populated by JS -->
+                    <div id="chatOutput">
+                        <div class="llm-narrative">System Initialized. The Drift awaits your command.</div>
+                    </div>
+                    <div class="p-2 bg-dark border-top border-secondary d-flex">
+                        <input type="text" id="chatInput" class="form-control bg-dark text-light border-secondary" placeholder="State your intent... (e.g. 'I attack the bandit')">
+                        <button class="btn btn-warning ms-2" onclick="sendChat()" style="font-weight:bold; color:#000;">Execute</button>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
-</div>
 
-<!-- DB Editor Modal -->
-<div class="modal fade" id="dbEditorModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Universal Database Editor</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <p><small>Write raw SQL to edit any variable. (e.g. <code>UPDATE world_prisons SET containment_strength = 1 WHERE prison_id = 1;</code>)</small></p>
-        <textarea id="sqlInput" class="form-control bg-dark text-light mb-2" rows="3" placeholder="Enter SQL Query..."></textarea>
-        <button class="btn btn-success" onclick="executeSQL()">Execute Query</button>
-        <hr class="border-secondary">
-        <h6>Query Results:</h6>
-        <div id="sqlResults" class="p-2 border border-secondary" style="height: 200px; overflow-y: scroll; background-color: #000; color: #0f0; font-family: monospace;">
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-    function updateStats() {
-        fetch('/api/stats')
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    document.getElementById('logOutput').innerHTML += `<br><span class="text-danger">Error: ${data.error}</span>`;
-                    return;
-                }
-                
-                document.getElementById('tickDisplay').innerText = `Simulation Tick: ${data.tick}`;
-                document.getElementById('moraleDisplay').innerText = data.avg_morale;
-                document.getElementById('chaosDisplay').innerText = data.total_chaos;
-                
-                // Color code morale
-                const mDisplay = document.getElementById('moraleDisplay');
-                mDisplay.className = data.avg_morale < 40 ? 'text-danger fw-bold' : 'text-success fw-bold';
-                
-                // Color code chaos
-                const cDisplay = document.getElementById('chaosDisplay');
-                cDisplay.className = data.total_chaos > 1000 ? 'text-danger fw-bold' : 'text-warning fw-bold';
-                
-                // Prisons
-                let prisonsHtml = '';
-                data.prisons.forEach(p => {
-                    let percent = (p.strength / 10000) * 100;
-                    let color = 'bg-success';
-                    if (percent < 50) color = 'bg-warning';
-                    if (percent < 20) color = 'bg-danger';
+        <!-- Right Column: Character Sheet -->
+        <div class="col-lg-4">
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark" style="font-weight: 900;">Biological Chassis</div>
+                <div class="card-body">
+                    <h4 id="charName" class="text-warning text-uppercase">Loading...</h4>
+                    <p class="mb-2 text-secondary"><span id="charOrigin">Origin</span> | Class: <span id="charClass">None</span> | Lvl <span id="charLevel">1</span> (<span id="charXP">0</span> XP)</p>
                     
-                    prisonsHtml += `
-                    <div class="col-12 mb-2">
-                        <small style="font-size: 0.75rem;">${p.name} (${p.strength}/10000)</small>
-                        <div class="progress">
-                          <div class="progress-bar ${color}" role="progressbar" style="width: ${percent}%"></div>
+                    <div class="d-flex justify-content-between align-items-center mb-3 p-2" style="background:#111; border:1px solid #333;">
+                        <div><small>SHARDS</small><br><span id="charShards" class="text-neon fs-5">0</span></div>
+                        <div class="text-end"><small>GEAR TAX</small><br><span id="charLoadout" class="text-danger fs-5">Light</span></div>
+                    </div>
+                    
+                    <div class="row g-2 mb-3">
+                        <div class="col-4">
+                            <div class="stat-box">
+                                <div class="text-danger" style="font-size:10px;">HP</div>
+                                <div id="charHP" class="stat-val text-danger">0</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="stat-box">
+                                <div class="text-warning" style="font-size:10px;">STAMINA</div>
+                                <div id="charSTA" class="stat-val text-warning">0</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="stat-box">
+                                <div class="text-info" style="font-size:10px;">FOCUS</div>
+                                <div id="charFOC" class="stat-val text-info">0</div>
+                            </div>
                         </div>
                     </div>
-                    `;
-                });
-                document.getElementById('prisonsDisplay').innerHTML = prisonsHtml;
-                
-                // Map Rendering
-                renderMap(data);
-            });
-    }
-    
-    function renderMap(burgs) {
-        if (!burgs || burgs.length === 0) return;
-        
-        let x = [];
-        let y = [];
-        let text = [];
-        let colors = [];
-        let sizes = [];
-        
-        let weatherEmojis = {
-            'Clear': '☀️',
-            'Rain': '🌧️',
-            'Drought': '🏜️',
-            'Storm': '⛈️',
-            'Blizzard': '❄️',
-            'Aether Storm': '🔮'
-        };
-        
-        burgs.forEach(b => {
-            x.push(b.x_coord);
-            y.push(b.y_coord);
-            let w_emoji = weatherEmojis[b.current_weather] || '☀️';
-            text.push(`<b>${b.name}</b> ${w_emoji}<br>Morale: ${b.morale.toFixed(1)}<br>Chaos: ${b.chaos_level.toFixed(1)}`);
-            
-            // Size based on chaos (if chaos > 0, it swells)
-            sizes.push(10 + (b.chaos_level / 5));
-            
-            // Color mapping: High Chaos = Purple/Red, High Morale = Green, Low Morale = Orange
-            if (b.chaos_level > 20) {
-                colors.push('rgba(148, 0, 211, 0.8)'); // Purple (Chaos)
-            } else if (b.morale < 40) {
-                colors.push('rgba(255, 140, 0, 0.8)'); // Orange (Starving)
-            } else {
-                colors.push('rgba(0, 255, 0, 0.5)'); // Green (Healthy)
-            }
-        });
-        
-        var trace = {
-            x: x,
-            y: y,
-            mode: 'markers',
-            marker: {
-                size: sizes,
-                color: colors,
-                line: { color: 'white', width: 0.5 }
-            },
-            text: text,
-            hoverinfo: 'text'
-        };
-
-        var layout = {
-            plot_bgcolor: '#111',
-            paper_bgcolor: '#111',
-            margin: { t: 10, b: 10, l: 10, r: 10 },
-            xaxis: { showgrid: false, zeroline: false, showticklabels: false },
-            yaxis: { showgrid: false, zeroline: false, showticklabels: false, scaleanchor: 'x' },
-            hovermode: 'closest'
-        };
-
-        Plotly.newPlot('mapContainer', [trace], layout, {staticPlot: false, displayModeBar: false});
-    }
-
-    function runTick() {
-        executeTick('');
-    }
-    
-    function runTickWithFamine() {
-        const faction = document.getElementById('famineInput').value;
-        if (!faction) {
-            alert('Please enter a faction name to induce famine.');
-            return;
-        }
-        executeTick(faction);
-    }
-    
-    function executeTick(famineFaction) {
-        document.getElementById('logOutput').innerHTML += `<br><span class="text-warning">Running tick...</span>`;
-        
-        const formData = new FormData();
-        formData.append('famine_faction', famineFaction);
-        
-        fetch('/api/run_tick', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            const logs = document.getElementById('logOutput');
-
-            const outputText = data.output.replace(/\n/g, '<br>');
-            if (data.status === 'success') {
-                logs.innerHTML += `<br>${outputText}`;
-            } else {
-                logs.innerHTML += `<br><span class="text-danger">${outputText}</span>`;
-            }
-            logs.scrollTop = logs.scrollHeight;
-            updateStats();
-        });
-    }
-    
-    function executeSQL() {
-        const query = document.getElementById('sqlInput').value;
-        if (!query) return;
-        
-        const formData = new FormData();
-        formData.append('query', query);
-        
-        fetch('/api/db_query', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            const resultsDiv = document.getElementById('sqlResults');
-            if (data.error) {
-                resultsDiv.innerHTML = `<span class="text-danger">${data.error}</span>`;
-            } else if (data.message) {
-                resultsDiv.innerHTML = `<span class="text-success">${data.message}</span>`;
-                updateStats(); // Update UI if variables changed
-            } else if (data.results) {
-                resultsDiv.innerHTML = `<pre>${JSON.stringify(data.results, null, 2)}</pre>`;
-            }
-        });
-    }
-
-    // Initial load
-    updateStats();
-</script>
-
-
-    <!-- Narrative Sidebar -->
-    <div id="narrativeSidebar" style="position: fixed; right: -400px; top: 0; width: 400px; height: 100vh; background: rgba(20, 20, 25, 0.95); border-left: 2px solid #9400D3; transition: right 0.3s ease; padding: 20px; box-sizing: border-box; overflow-y: auto; z-index: 1000; box-shadow: -5px 0 15px rgba(0,0,0,0.5); backdrop-filter: blur(10px);">
-        <button onclick="document.getElementById('narrativeSidebar').style.right = '-400px'" style="background: none; border: none; color: white; float: right; cursor: pointer; font-size: 24px;">&times;</button>
-        <h2 id="narrativeTitle" style="color: #00ffcc; margin-top: 0; font-family: 'Georgia', serif;">Location Data</h2>
-        
-        <div id="battlemapContainer" style="margin-top: 20px; border: 1px solid #444; border-radius: 5px; overflow: hidden; display: none;">
-            <div style="background: #222; padding: 5px; font-size: 12px; color: #aaa; text-align: center; border-bottom: 1px solid #444;">
-                <span id="sectorLabel">Sector 1</span> Battlemap (100x100)
+                    
+                    <h6 class="text-muted border-bottom border-secondary pb-1 mb-2" style="font-size:12px;">SOURCE CODE (STATS)</h6>
+                    <div class="row g-1 mb-3" style="font-size:13px; font-family:monospace;">
+                        <div class="col-6"><span class="text-secondary">MIG:</span> <span id="statMIG">0</span></div>
+                        <div class="col-6"><span class="text-secondary">KNO:</span> <span id="statKNO">0</span></div>
+                        <div class="col-6"><span class="text-secondary">FIN:</span> <span id="statFIN">0</span></div>
+                        <div class="col-6"><span class="text-secondary">AWA:</span> <span id="statAWA">0</span></div>
+                        <div class="col-6"><span class="text-secondary">REF:</span> <span id="statREF">0</span></div>
+                        <div class="col-6"><span class="text-secondary">INT:</span> <span id="statINT">0</span></div>
+                        <div class="col-6"><span class="text-secondary">END:</span> <span id="statEND">0</span></div>
+                        <div class="col-6"><span class="text-secondary">LOG:</span> <span id="statLOG">0</span></div>
+                        <div class="col-6"><span class="text-secondary">FOR:</span> <span id="statFOR">0</span></div>
+                        <div class="col-6"><span class="text-secondary">CHA:</span> <span id="statCHA">0</span></div>
+                        <div class="col-6"><span class="text-secondary">VIT:</span> <span id="statVIT">0</span></div>
+                        <div class="col-6"><span class="text-secondary">WIL:</span> <span id="statWIL">0</span></div>
+                    </div>
+                    
+                    <h6 class="text-muted border-bottom border-secondary pb-1 mb-2" style="font-size:12px;">INVENTORY & TRAITS</h6>
+                    <div style="font-size:13px; margin-bottom:15px;">
+                        <div><span class="text-secondary">Items:</span> <span id="charInv">None</span></div>
+                        <div><span class="text-secondary">Skills:</span> <span id="charSkills">None</span></div>
+                    </div>
+                </div>
             </div>
-            <canvas id="battlemapCanvas" width="300" height="300" style="display: block; width: 100%; height: auto; image-rendering: pixelated;"></canvas>
-        </div>
-
-        <div id="narrativeContent" style="color: #eee; font-size: 15px; line-height: 1.6;">
-            Click a map marker to see local story hooks and crosslinked lore.
+            
+            <div class="card">
+                <div class="card-header" style="font-size:12px;">COMBAT TACTICS</div>
+                <div class="card-body p-2">
+                    <div class="row g-2">
+                        <div class="col-6"><button class="btn btn-outline-danger w-100 btn-sm" onclick="visualAction('COMBAT_TACTIC', 'PRESS')">⚔️ Press (-1 STA)</button></div>
+                        <div class="col-6"><button class="btn btn-outline-warning w-100 btn-sm" onclick="visualAction('COMBAT_TACTIC', 'HOLD')">🛡️ Hold (-1 STA)</button></div>
+                        <div class="col-6"><button class="btn btn-outline-primary w-100 btn-sm" onclick="visualAction('COMBAT_TACTIC', 'MANEUVER')">🏃 Maneuver (-1 STA)</button></div>
+                        <div class="col-6"><button class="btn btn-outline-info w-100 btn-sm" onclick="visualAction('COMBAT_TACTIC', 'TRICK')">🎯 Trick (-1 STA)</button></div>
+                        <div class="col-6"><button class="btn btn-outline-secondary w-100 btn-sm" onclick="visualAction('COMBAT_TACTIC', 'FEINT')">🎭 Feint (-1 STA)</button></div>
+                        <div class="col-6"><button class="btn btn-outline-success w-100 btn-sm" onclick="visualAction('COMBAT_TACTIC', 'DISENGAGE')">💨 Disengage (-1 STA)</button></div>
+                    </div>
+                    <hr class="border-secondary my-2">
+                    <button class="btn btn-dark border-secondary w-100 btn-sm" onclick="visualAction('WAIT', 'WAIT')">⏳ Wait (Tick Engine)</button>
+                </div>
+            </div>
         </div>
     </div>
+</div>
 
+<script>
+    // PRNG
+    function seededRandom(seed) {
+        var x = Math.sin(seed++) * 10000;
+        return x - Math.floor(x);
+    }
+
+    function renderBattlemap(state) {
+        const canvas = document.getElementById('battlemapCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        const TILE_SIZE = 6;
+        const GRID_SIZE = 100;
+        
+        let currentSeed = state.seed || 12345;
+        document.getElementById('sectorLabel').innerText = `Cluster ${state.cluster_id || 13} - Local Battlemap (100x100)`;
+        
+        const colorMap = {
+            'Temperate': ['#1a2e12', '#233d18', '#2f5221', '#0e170a'],
+            'Chaos Wastes': ['#2a1a3a', '#3b244d', '#4d2d63', '#1e112b'],
+            'Obsidian Expanse': ['#111', '#1a1a1a', '#222', '#0a0a0a']
+        };
+        const palette = colorMap[state.base_biome] || colorMap['Temperate'];
+        
+        // Draw Terrain
+        for (let x = 0; x < GRID_SIZE; x++) {
+            for (let y = 0; y < GRID_SIZE; y++) {
+                let val = seededRandom(currentSeed + (x * 100) + y);
+                
+                let color = palette[0];
+                if (val > 0.8) color = palette[1];
+                if (val > 0.95) color = palette[2];
+                if (val < 0.05) color = palette[3]; // Obstructions
+                
+                ctx.fillStyle = color;
+                ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            }
+        }
+        
+        // Draw Player (Blue)
+        let px = state.player_x || 50;
+        let py = state.player_y || 50;
+        ctx.fillStyle = '#00ffff';
+        ctx.fillRect(px * TILE_SIZE, py * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        
+        // Draw Paragons (Red)
+        if (state.paragons) {
+            state.paragons.forEach(p => {
+                let ex = p.local_x || 55;
+                let ey = p.local_y || 55;
+                ctx.fillStyle = '#ff4d4d';
+                ctx.fillRect(ex * TILE_SIZE, ey * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            });
+        }
+    }
+
+    async function loadSectorData() {
+        try {
+            // Player starts at location_id = 1 usually. Query the state.
+            const res = await fetch('/api/ttrpg/query?location_type=Burg&location_id=1&cluster_id=13');
+            const state = await res.json();
+            
+            // Add fake player pos just for visualization if not returned by API
+            if(!state.player_x) state.player_x = 50;
+            if(!state.player_y) state.player_y = 50;
+            
+            // Add fake paragons if none returned
+            if(!state.paragons) {
+                state.paragons = [{local_x: 55, local_y: 45}, {local_x: 48, local_y: 60}];
+            }
+            
+            renderBattlemap(state);
+        } catch(e) { console.error("Map Load Error", e); }
+    }
+
+    async function refreshCharData() {
+        try {
+            const res = await fetch('/api/ttrpg/get_character?id=1');
+            const data = await res.json();
+            if(data.status === 'success') {
+                document.getElementById('charName').innerText = data.name;
+                document.getElementById('charOrigin').innerText = data.origin;
+                document.getElementById('charLevel').innerText = data.level;
+                document.getElementById('charXP').innerText = data.xp;
+                document.getElementById('charShards').innerText = data.shards;
+                document.getElementById('charLoadout').innerText = data.loadout;
+                document.getElementById('charHP').innerText = data.health;
+                document.getElementById('charSTA').innerText = data.stamina;
+                document.getElementById('charFOC').innerText = data.focus;
+                
+                document.getElementById('statMIG').innerText = data.stats.might;
+                document.getElementById('statFIN').innerText = data.stats.finesse;
+                document.getElementById('statREF').innerText = data.stats.reflex;
+                document.getElementById('statEND').innerText = data.stats.endurance;
+                document.getElementById('statFOR').innerText = data.stats.fortitude;
+                document.getElementById('statVIT').innerText = data.stats.vitality;
+                document.getElementById('statKNO').innerText = data.stats.knowledge;
+                document.getElementById('statAWA').innerText = data.stats.awareness;
+                document.getElementById('statINT').innerText = data.stats.intuition;
+                document.getElementById('statLOG').innerText = data.stats.logic;
+                document.getElementById('statCHA').innerText = data.stats.charm;
+                document.getElementById('statWIL').innerText = data.stats.willpower;
+                
+                let inv = data.inventory;
+                try { inv = JSON.parse(inv); } catch(e){}
+                document.getElementById('charInv').innerText = Array.isArray(inv) ? inv.map(i => i.name || i).join(', ') : 'None';
+                
+                let skills = data.skills;
+                try { skills = JSON.parse(skills); } catch(e){}
+                document.getElementById('charSkills').innerText = Array.isArray(skills) ? skills.join(', ') : 'None';
+            }
+        } catch(e) { console.error("Sheet error", e); }
+    }
+
+    async function sendChat(messageOverride=null) {
+        const input = document.getElementById('chatInput');
+        const msg = messageOverride || input.value;
+        if(!msg) return;
+        
+        const out = document.getElementById('chatOutput');
+        out.innerHTML += `<div class="player-msg">> ${msg}</div>`;
+        input.value = '';
+        out.scrollTop = out.scrollHeight;
+        
+        document.getElementById('loadingSpinner').style.display = 'block';
+        
+        const fd = new FormData();
+        fd.append('message', msg);
+        fd.append('player_id', 1);
+        
+        try {
+            const res = await fetch('/api/ttrpg/chat', { method: 'POST', body: fd });
+            const data = await res.json();
+            
+            let html = `<div class="mt-2 mb-3">`;
+            if(data.execution_results && data.execution_results.length > 0) {
+                data.execution_results.forEach(r => {
+                    html += `<div class="system-math">[SYS] ${r.message || r.status}</div>`;
+                });
+            }
+            html += `<div class="llm-narrative">${data.response}</div></div>`;
+            out.innerHTML += html;
+            out.scrollTop = out.scrollHeight;
+            refreshCharData();
+        } catch(e) {
+            out.innerHTML += `<div class="text-danger">Error: ${e}</div>`;
+        }
+        document.getElementById('loadingSpinner').style.display = 'none';
+    }
+    
+    function visualAction(intentType, tactic) {
+        let msg = "";
+        if(intentType === 'COMBAT_TACTIC') msg = `I use the ${tactic} combat tactic against the enemy.`;
+        if(intentType === 'WAIT') msg = `I wait and pass the time.`;
+        sendChat(msg);
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        document.getElementById('chatInput').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') sendChat();
+        });
+        
+        const canvas = document.getElementById('battlemapCanvas');
+        if (canvas) {
+            canvas.addEventListener('click', function(e) {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                // Canvas is 600x600, Grid is 100x100. TILE_SIZE is 6.
+                const tileX = Math.floor(x / 6);
+                const tileY = Math.floor(y / 6);
+                
+                const msg = `I move to coordinates (${tileX}, ${tileY}) on the map.`;
+                sendChat(msg);
+            });
+        }
+        
+        refreshCharData();
+        loadSectorData();
+    });
+</script>
 </body>
 </html>

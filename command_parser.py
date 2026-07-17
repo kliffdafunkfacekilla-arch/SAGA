@@ -37,8 +37,8 @@ def generate_local_map(location_type, location_id, sector_index=1):
     conn = get_db()
     c = conn.cursor()
     
-    # Check if cluster exists by checking sector 13
-    c.execute("SELECT id FROM map_sectors WHERE location_type = ? AND location_id = ? AND sector_index = 13", 
+    # Check if cluster exists by checking cluster 13 (the core)
+    c.execute("SELECT id FROM map_tiles WHERE location_type = ? AND location_id = ? AND cluster_id = 13", 
               (location_type, location_id))
     if c.fetchone():
         conn.close()
@@ -96,12 +96,12 @@ def generate_local_map(location_type, location_id, sector_index=1):
         sectors_to_insert.append((location_type, location_id, s, base_biome, archetype, seed))
         
     c.executemany('''
-        INSERT INTO map_sectors (location_type, location_id, sector_index, base_biome, feature_archetype, seed)
+        INSERT INTO map_tiles (location_type, location_id, cluster_id, base_biome, feature_archetype, seed)
         VALUES (?, ?, ?, ?, ?, ?)
     ''', sectors_to_insert)
     
     # 4. Generate Micro-Entities for the Blueprint
-    c.execute("SELECT id, sector_index, feature_archetype FROM map_sectors WHERE location_type=? AND location_id=?", (location_type, location_id))
+    c.execute("SELECT id, cluster_id, feature_archetype FROM map_tiles WHERE location_type=? AND location_id=?", (location_type, location_id))
     new_sectors = c.fetchall()
     
     deltas_to_insert = []
@@ -136,7 +136,7 @@ def generate_local_map(location_type, location_id, sector_index=1):
                 
     if deltas_to_insert:
         c.executemany('''
-            INSERT INTO map_deltas (sector_id, local_x, local_y, change_type, details)
+            INSERT INTO map_deltas (tile_id, local_x, local_y, change_type, details)
             VALUES (?, ?, ?, ?, ?)
         ''', deltas_to_insert)
     
@@ -144,10 +144,10 @@ def generate_local_map(location_type, location_id, sector_index=1):
     conn.close()
     return True
 
-def query_local_state(location_type, location_id, sector_index=1):
+def query_local_state(location_type, location_id, cluster_id=13):
     """
     Returns full state for the LLM to narrate:
-    Hooks, Weather, Chaos, Paragons, Map Data
+    Hooks, Weather, Chaos, Paragons, Map Data, and Narrative Seeding (Lore).
     """
     conn = get_db()
     c = conn.cursor()
@@ -158,24 +158,24 @@ def query_local_state(location_type, location_id, sector_index=1):
         c.execute('''
             SELECT b.name, b.morale, b.chaos_level, b.current_weather, m.id, m.base_biome, m.feature_archetype, m.seed 
             FROM burgs b
-            LEFT JOIN map_sectors m ON m.location_id = b.id AND m.location_type = 'Burg' AND m.sector_index = ?
+            LEFT JOIN map_tiles m ON m.location_id = b.id AND m.location_type = 'Burg' AND m.cluster_id = ?
             WHERE b.id = ?
-        ''', (sector_index, location_id))
+        ''', (cluster_id, location_id))
         row = c.fetchone()
         if row:
             state['name'] = row[0]
             state['morale'] = row[1]
             state['chaos'] = row[2]
             state['weather'] = row[3]
-            state['sector_id'] = row[4]
+            state['tile_id'] = row[4]
             state['base_biome'] = row[5]
             state['feature_archetype'] = row[6]
             state['seed'] = row[7]
-            state['sector_index'] = sector_index
+            state['cluster_id'] = cluster_id
             
             # Fetch Deltas
             if row[4]:
-                c.execute("SELECT local_x, local_y, change_type, details FROM map_deltas WHERE sector_id = ?", (row[4],))
+                c.execute("SELECT local_x, local_y, change_type, details FROM map_deltas WHERE tile_id = ?", (row[4],))
                 state['deltas'] = [{'x': d[0], 'y': d[1], 'type': d[2], 'details': d[3]} for d in c.fetchall()]
             else:
                 state['deltas'] = []
@@ -183,25 +183,48 @@ def query_local_state(location_type, location_id, sector_index=1):
     elif location_type in ['Zone', 'Prison', 'Marker']:
         c.execute('''
             SELECT m.id, m.base_biome, m.feature_archetype, m.seed 
-            FROM map_sectors m
-            WHERE m.location_id = ? AND m.location_type = ? AND m.sector_index = ?
-        ''', (location_id, location_type, sector_index))
+            FROM map_tiles m
+            WHERE m.location_id = ? AND m.location_type = ? AND m.cluster_id = ?
+        ''', (location_id, location_type, cluster_id))
         row = c.fetchone()
         if row:
-            state['sector_id'] = row[0]
+            state['tile_id'] = row[0]
             state['base_biome'] = row[1]
             state['feature_archetype'] = row[2]
             state['seed'] = row[3]
-            state['sector_index'] = sector_index
+            state['cluster_id'] = cluster_id
             state['deltas'] = [] # Need proper delta fetch for zones too if needed
             
     # 2. Paragons
-    c.execute("SELECT id, name, role, trait_1, flaw_1, local_x, local_y FROM paragons WHERE location_id = ? AND sector_index = ?", (location_id, sector_index))
-    state['paragons'] = [{'id': r[0], 'name': r[1], 'role': r[2], 'trait': r[3], 'flaw': r[4], 'x': r[5], 'y': r[6]} for r in c.fetchall()]
+    c.execute("SELECT id, name, role, trait_1, flaw_1, local_x, local_y FROM paragons WHERE location_id = ? AND cluster_id = ?", (location_id, cluster_id))
+    state['paragons'] = [{'id': r[0], 'name': r[1], 'role': r[2], 'trait': r[3], 'flaw': r[4], 'local_x': r[5], 'local_y': r[6]} for r in c.fetchall()]
     
-    # 3. Hooks
-    c.execute("SELECT hook_category, description FROM story_hooks WHERE location_type = ? AND location_id = ?", (location_type, location_id))
-    state['hooks'] = [{'category': r[0], 'description': r[1]} for r in c.fetchall()]
+    # 3. Hooks & Narrative Seeding (world_lore)
+    c.execute("SELECT id, hook_category, description FROM story_hooks WHERE location_type = ? AND location_id = ?", (location_type, location_id))
+    hooks_data = []
+    for r in c.fetchall():
+        hook_dict = {'category': r[1], 'description': r[2]}
+        
+        # Look up crosslinked lore
+        c.execute('''
+            SELECT l.subject, l.content 
+            FROM world_lore l
+            JOIN lore_crosslinks c ON c.lore_id = l.lore_id
+            WHERE c.hook_id = ?
+        ''', (r[0],))
+        lore_entries = c.fetchall()
+        if lore_entries:
+            hook_dict['lore'] = [{'subject': l[0], 'content': l[1]} for l in lore_entries]
+        hooks_data.append(hook_dict)
+        
+    state['hooks'] = hooks_data
+    
+    # 4. Fetch player position
+    c.execute("SELECT local_x, local_y FROM player_characters WHERE id = 1")
+    p_row = c.fetchone()
+    if p_row:
+        state['player_x'] = p_row[0]
+        state['player_y'] = p_row[1]
     
     conn.close()
     return state
@@ -241,7 +264,7 @@ def create_character(name, origin, skill):
                               level, xp, shards, inventory, skills,
                               might, endurance, finesse, reflex, vitality, fortitude,
                               knowledge, logic, awareness, intuition, charm, willpower,
-                              trait_1, flaw_1, location_id, sector_index, local_x, local_y)
+                              trait_1, flaw_1, location_id, cluster_id, local_x, local_y)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0, '[]', ?,
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 'Determined', 'Reckless', 1, 13, 50, 50)
@@ -311,51 +334,50 @@ def execute_action(actor_id, action_type, target_id=None, **kwargs):
         dx = kwargs.get('dx', 0)
         dy = kwargs.get('dy', 0)
         
-        c.execute("SELECT location_id, sector_index, local_x, local_y FROM paragons WHERE id = ?", (actor_id,))
+        c.execute("SELECT location_id, cluster_id, local_x, local_y FROM paragons WHERE id = ?", (actor_id,))
         row = c.fetchone()
         if not row: return {"status": "error", "message": "Paragon not found"}
-        loc_id, sector, x, y = row
+        loc_id, cluster, x, y = row
         
         nx, ny = x + dx, y + dy
         
         # Sector Transition Logic (Assuming a 5x5 cluster for sectors 1-25)
         if nx < 0:
             nx = 99
-            if (sector - 1) % 5 == 0:
+            if (cluster - 1) % 5 == 0:
                 result['message'] = "Player walked off the West edge of the Regional Hex! Entering new Hex..."
-                # Here we would look up the adjacent Hex to the West, but for now we just wrap or stay.
                 # loc_id = get_west_hex(loc_id)
-                sector += 4 # Move to eastern edge of new hex
+                cluster += 4 # Move to eastern edge of new hex
             else:
-                sector -= 1
+                cluster -= 1
         elif nx > 99:
             nx = 0
-            if sector % 5 == 0:
+            if cluster % 5 == 0:
                 result['message'] = "Player walked off the East edge of the Regional Hex! Entering new Hex..."
-                sector -= 4
+                cluster -= 4
             else:
-                sector += 1
+                cluster += 1
                 
         if ny < 0:
             ny = 99
-            if sector <= 5:
+            if cluster <= 5:
                 result['message'] = "Player walked off the North edge of the Regional Hex! Entering new Hex..."
-                sector += 20
+                cluster += 20
             else:
-                sector -= 5
+                cluster -= 5
         elif ny > 99:
             ny = 0
-            if sector > 20:
+            if cluster > 20:
                 result['message'] = "Player walked off the South edge of the Regional Hex! Entering new Hex..."
-                sector -= 20
+                cluster -= 20
             else:
-                sector += 5
+                cluster += 5
 
         # Update position
-        c.execute("UPDATE paragons SET location_id=?, sector_index=?, local_x=?, local_y=? WHERE id=?", 
-                  (loc_id, sector, nx, ny, actor_id))
-        result['message'] = result.get('message', f"Paragon walked to ({nx}, {ny}) in Sector {sector}")
-        result['new_state'] = {"location_id": loc_id, "sector": sector, "x": nx, "y": ny}
+        c.execute("UPDATE paragons SET location_id=?, cluster_id=?, local_x=?, local_y=? WHERE id=?", 
+                  (loc_id, cluster, nx, ny, actor_id))
+        result['message'] = result.get('message', f"Paragon walked to ({nx}, {ny}) in Cluster {cluster}")
+        result['new_state'] = {"location_id": loc_id, "cluster": cluster, "x": nx, "y": ny}
         
     elif action_type == 'MOVE':
         # target_id is the new location_id
@@ -370,17 +392,17 @@ def execute_action(actor_id, action_type, target_id=None, **kwargs):
         
     elif action_type == 'SPAWN_ENTITY':
         # DM injects a new entity into the world
-        sector_id = kwargs.get('sector_id')
+        tile_id = kwargs.get('tile_id')
         x = kwargs.get('x', 50)
         y = kwargs.get('y', 50)
         entity_type = kwargs.get('entity_type', 'NPC')
         details = kwargs.get('details', {})
         
         c.execute('''
-            INSERT INTO map_deltas (sector_id, local_x, local_y, change_type, details)
+            INSERT INTO map_deltas (tile_id, local_x, local_y, change_type, details)
             VALUES (?, ?, ?, ?, ?)
-        ''', (sector_id, x, y, entity_type, json.dumps(details)))
-        result['message'] = f"DM spawned {entity_type} at ({x}, {y}) in sector {sector_id}"
+        ''', (tile_id, x, y, entity_type, json.dumps(details)))
+        result['message'] = f"DM spawned {entity_type} at ({x}, {y}) in tile {tile_id}"
     elif action_type == 'TAKE_DAMAGE':
         amount = kwargs.get('amount', 0)
         c.execute("UPDATE player_characters SET health = health - ? WHERE id = ?", (amount, target_id))

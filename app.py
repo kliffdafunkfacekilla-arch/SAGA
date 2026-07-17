@@ -110,13 +110,13 @@ def get_hooks(location_type, location_id):
 def ttrpg_query():
     loc_type = request.args.get('location_type', 'Burg')
     loc_id = request.args.get('location_id', 1, type=int)
-    sector_idx = request.args.get('sector_index', 1, type=int)
+    cluster_idx = request.args.get('cluster_id', 13, type=int)
     
     # Generate map dynamically if it doesn't exist
-    command_parser.generate_local_map(loc_type, loc_id, sector_idx)
+    command_parser.generate_local_map(loc_type, loc_id, cluster_idx)
     
     # Get state
-    state = command_parser.query_local_state(loc_type, loc_id, sector_idx)
+    state = command_parser.query_local_state(loc_type, loc_id, cluster_idx)
     return jsonify(state)
 
 @app.route('/api/ttrpg/create_character', methods=['POST'])

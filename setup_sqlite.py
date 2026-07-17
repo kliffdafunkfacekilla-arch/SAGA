@@ -180,11 +180,11 @@ def setup_database():
     ''')
 
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS map_sectors (
+        CREATE TABLE IF NOT EXISTS map_tiles (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             location_type TEXT,
             location_id INTEGER,
-            sector_index INTEGER,
+            cluster_id INTEGER, -- 1 to 25
             base_biome TEXT,
             feature_archetype TEXT,
             seed INTEGER,
@@ -195,12 +195,12 @@ def setup_database():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS map_deltas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sector_id INTEGER,
+            tile_id INTEGER,
             local_x INTEGER,
             local_y INTEGER,
             change_type TEXT,
             details TEXT,
-            FOREIGN KEY(sector_id) REFERENCES map_sectors(id)
+            FOREIGN KEY(tile_id) REFERENCES map_tiles(id)
         )
     ''')
 
@@ -369,7 +369,7 @@ def setup_database():
             might INTEGER, endurance INTEGER, finesse INTEGER, reflex INTEGER, vitality INTEGER, fortitude INTEGER,
             knowledge INTEGER, logic INTEGER, awareness INTEGER, intuition INTEGER, charm INTEGER, willpower INTEGER,
             trait_1 TEXT, flaw_1 TEXT,
-            location_id INTEGER, sector_index INTEGER, local_x INTEGER, local_y INTEGER
+            location_id INTEGER, cluster_id INTEGER, local_x INTEGER, local_y INTEGER
         )
     ''')
 
@@ -380,7 +380,7 @@ def setup_database():
         name TEXT,
         role TEXT,
         location_id INTEGER,
-        sector_index INTEGER DEFAULT 1,
+        cluster_id INTEGER DEFAULT 1,
         local_x INTEGER DEFAULT 50,
         local_y INTEGER DEFAULT 50,
         faction_name TEXT,
