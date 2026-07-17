@@ -1,3 +1,11 @@
+"""
+engine.py
+
+The SAGA Engine core tick loop.
+This module processes chronological intervals in the simulation, executing 
+Meteorology, Ecology, Faction AI, and Metaphysical Conflicts across the world state.
+It directly interacts with `okasha_world.db` as the source of truth.
+"""
 import sqlite3
 import os
 import random

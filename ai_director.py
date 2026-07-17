@@ -1,3 +1,11 @@
+"""
+ai_director.py
+
+This module contains the AI Director for the SAGA Engine.
+The Director acts as an intelligent, asynchronous actor that synthesizes 
+the global environment, active hooks, and player state to inject physical 
+entities, hazards, and storylines directly into the world via the command parser.
+"""
 import sqlite3
 import json
 import re
@@ -16,12 +24,12 @@ CRITICAL INSTRUCTIONS:
 - Output [EXECUTE: SPAWN_ENTITY] ONLY when a physical entity (NPC, trap, loot) must be injected into the player's immediate path.
 
 Supported Commands:
-- [EXECUTE: SPAWN_ENTITY, sector_id: <id>, x: <int>, y: <int>, entity_type: <string>, details: <json_string>]
+- [EXECUTE: SPAWN_ENTITY, tile_id: <id>, x: <int>, y: <int>, entity_type: <string>, details: <json_string>]
 - [EXECUTE: ALTER_CHAOS, target_id: <burg_id>, amount: <int>]
 
 Example Output:
 The air grows cold. A cartel enforcer steps out from the shadowed alley, clutching a rust-pitted shotgun.
-[EXECUTE: SPAWN_ENTITY, sector_id: 1, x: 55, y: 50, entity_type: 'NPC', details: '{"name": "Cartel Enforcer", "hook": "Looking to collect a debt"}']
+[EXECUTE: SPAWN_ENTITY, tile_id: 1, x: 55, y: 50, entity_type: 'NPC', details: '{"name": "Cartel Enforcer", "hook": "Looking to collect a debt"}']
 """
 
 def pulse_scene(player_id, action_context="", db_path='okasha_world.db'):
@@ -32,23 +40,23 @@ def pulse_scene(player_id, action_context="", db_path='okasha_world.db'):
     c = conn.cursor()
     
     # 1. Get Player Location
-    c.execute("SELECT location_id, sector_index, local_x, local_y FROM player_characters WHERE id = ?", (player_id,))
+    c.execute("SELECT location_id, cluster_id, local_x, local_y FROM player_characters WHERE id = ?", (player_id,))
     p_row = c.fetchone()
     if not p_row:
         conn.close()
         return {"status": "error", "message": "Player not found."}
         
-    burg_id, sector_index, px, py = p_row
+    burg_id, cluster_id, px, py = p_row
     
     # 2. Get Burg / Hex Data
-    c.execute("SELECT name, population, wealth, chaos FROM burgs WHERE id = ?", (burg_id,))
+    c.execute("SELECT name, population, morale, chaos_level FROM burgs WHERE id = ?", (burg_id,))
     b_row = c.fetchone()
     burg_info = {"id": burg_id}
     if b_row:
-        burg_info = {"id": burg_id, "name": b_row[0], "population": b_row[1], "wealth": b_row[2], "chaos": b_row[3]}
+        burg_info = {"id": burg_id, "name": b_row[0], "population": b_row[1], "morale": b_row[2], "chaos_level": b_row[3]}
         
     # 3. Get Active Story Hooks
-    c.execute("SELECT title, description FROM story_hooks WHERE status = 'active' OR status = 'emerging' LIMIT 3")
+    c.execute("SELECT hook_category, description FROM story_hooks WHERE status = 'active' OR status = 'emerging' LIMIT 3")
     hooks = [{"title": r[0], "description": r[1]} for r in c.fetchall()]
     
     conn.close()
@@ -56,7 +64,7 @@ def pulse_scene(player_id, action_context="", db_path='okasha_world.db'):
     # 4. Construct Director State
     state = {
         "recent_player_action": action_context,
-        "player_location": f"Burg ID: {burg_id}, Sector: {sector_index}, Coordinates: ({px}, {py})",
+        "player_location": f"Burg ID: {burg_id}, Cluster: {cluster_id}, Coordinates: ({px}, {py})",
         "local_conditions": burg_info,
         "active_global_hooks": hooks
     }
@@ -80,7 +88,7 @@ def pulse_scene(player_id, action_context="", db_path='okasha_world.db'):
     except (urllib.error.URLError, TimeoutError) as e:
         # Graceful Fallback if Ollama is offline
         print(f"Ollama Connection Error: {e}. Falling back to mock Director logic.")
-        response_text = f"The shadows shift. An anomaly spawns nearby. [EXECUTE: SPAWN_ENTITY, sector_id: {sector_index}, x: {px+2}, y: {py+2}, entity_type: 'Anomaly', details: '{{\"name\": \"Glitch\", \"hook\": \"Vibrating intensely\"}}']"
+        response_text = f"The shadows shift. An anomaly spawns nearby. [EXECUTE: SPAWN_ENTITY, tile_id: {cluster_id}, x: {px+2}, y: {py+2}, entity_type: 'Anomaly', details: '{{\"name\": \"Glitch\", \"hook\": \"Vibrating intensely\"}}']"
             
     # Parse the commands using Regex from llm_gm
     cleaned_response, commands = parse_llm_commands(response_text)
@@ -89,13 +97,14 @@ def pulse_scene(player_id, action_context="", db_path='okasha_world.db'):
     execution_results = []
     for cmd in commands:
         try:
-            # Override sector_id dynamically if missing or default to the player's sector
-            if 'sector_id' not in cmd:
-                cmd['sector_id'] = sector_index
-            res = command_parser.execute_action(cmd['type'], **cmd)
+            # Override tile_id dynamically if missing or default to the player's cluster
+            if 'tile_id' not in cmd:
+                cmd['tile_id'] = cluster_id
+            action_type = cmd.pop('type')
+            res = command_parser.execute_action(player_id, action_type, **cmd)
             execution_results.append(res)
         except Exception as e:
-            execution_results.append({"status": "error", "message": f"Failed to execute {cmd['type']}: {str(e)}"})
+            execution_results.append({"status": "error", "message": f"Failed to execute {action_type}: {str(e)}"})
         
     return {
         "narrative": cleaned_response,

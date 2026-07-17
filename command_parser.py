@@ -1,3 +1,10 @@
+"""
+command_parser.py
+
+Translates abstracted AI intents and player actions into precise 
+database queries against the SAGA Engine. Also handles 
+the 25-cluster map blueprint generation and delta-state retrieval.
+"""
 import sqlite3
 import random
 import json
