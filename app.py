@@ -28,6 +28,44 @@ def query_db(query, args=(), one=False):
 def index():
     return render_template('index.html')
 
+@app.route('/play')
+def play():
+    return render_template('player_view.html')
+
+@app.route('/api/admin/stats')
+def admin_stats():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    tick = engine.get_current_tick()
+    
+    c.execute("SELECT COUNT(*), AVG(chaos_level) FROM burgs")
+    row = c.fetchone()
+    total_burgs = row[0] or 0
+    avg_chaos = row[1] or 0.0
+    
+    c.execute("SELECT AVG(containment_strength) FROM world_prisons")
+    row = c.fetchone()
+    avg_prison_integrity = row[0] or 10000.0
+    
+    c.execute("SELECT hook_category, description, status FROM story_hooks WHERE status = 'active' OR status = 'emerging'")
+    hooks = [{"hook_category": r[0], "description": r[1], "status": r[2]} for r in c.fetchall()]
+    
+    c.execute("SELECT location_id, new_members, priests FROM cult_forces WHERE location_type = 'Burg' AND new_members > 0")
+    cults = [{"location_id": r[0], "new_members": r[1], "priests": r[2]} for r in c.fetchall()]
+    
+    conn.close()
+    
+    return jsonify({
+        "tick": tick,
+        "total_burgs": total_burgs,
+        "avg_chaos": avg_chaos,
+        "avg_prison_integrity": avg_prison_integrity,
+        "hooks": hooks,
+        "cults": cults
+    })
+
+
 @app.route('/api/stats')
 def stats():
     if not os.path.exists(DB_PATH):

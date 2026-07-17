@@ -419,19 +419,19 @@ def setup_database():
     
     cursor.execute('''
         INSERT OR IGNORE INTO player_characters (
-            id, name, origin, class, level, xp, shards, loadout,
-            hp, stamina, focus,
+            id, name, origin, loadout, level, xp, shards,
+            health, max_health, stamina, max_stamina, focus, max_focus,
             might, finesse, reflex, endurance, fortitude, vitality,
             knowledge, awareness, intuition, logic, charm, willpower,
             inventory, skills,
-            location_type, location_id, cluster_id, local_x, local_y
+            location_id, cluster_id, local_x, local_y
         ) VALUES (
-            1, 'Warden', 'The Drift', 'Vagabond', 1, 0, 0, 'Light',
-            30, 20, 20,
+            1, 'Warden', 'The Drift', 'Light', 1, 0, 0,
+            30, 30, 20, 20, 20, 20,
             10, 10, 10, 10, 10, 10,
             10, 10, 10, 10, 10, 10,
             '[]', '[]',
-            'Burg', 1, 13, 50, 50
+            1, 13, 50, 50
         )
     ''')
 

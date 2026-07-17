@@ -3,132 +3,66 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>B.R.U.T.A.L. Engine TTRPG</title>
+    <title>SAGA - DM Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background-color: #0d0d0d; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
-        .card { background-color: #1a1a1a; border: 1px solid #333; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.5); }
-        .card-header { background-color: #252525; border-bottom: 1px solid #444; font-weight: bold; color: #fff; text-transform: uppercase; letter-spacing: 1px; }
-        .text-neon { color: #00ffcc; }
-        #chatOutput { background-color: #000; color: #b3b3b3; font-family: monospace; height: 350px; overflow-y: auto; padding: 15px; border: 1px solid #333; font-size: 14px;}
-        .llm-narrative { color: #d4af37; font-style: italic; margin-bottom: 10px; }
-        .system-math { color: #00ffcc; font-size: 0.9em; margin-bottom: 5px; }
-        .player-msg { color: #ffffff; font-weight: bold; margin-bottom: 5px; }
-        
-        #battlemapContainer { 
-            width: 100%; 
-            background-color: #000; 
-            border: 1px solid #444; 
-            padding: 5px;
-            display: flex;
-            justify-content: center;
-        }
-        canvas {
-            image-rendering: pixelated;
-            border: 1px solid #222;
-        }
-        
-        .stat-box { text-align: center; background: #222; padding: 5px; border: 1px solid #444; border-radius: 4px; }
-        .stat-val { font-size: 1.2rem; font-weight: bold; }
+        body { background-color: #000; color: #0f0; font-family: monospace; }
+        .card { background-color: #111; border: 1px solid #333; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.5); }
+        .card-header { background-color: #222; border-bottom: 1px solid #444; font-weight: bold; color: #fff; text-transform: uppercase; }
+        .metric-box { border: 1px solid #0f0; padding: 10px; text-align: center; margin-bottom: 10px; }
+        .metric-val { font-size: 2rem; font-weight: bold; }
     </style>
 </head>
 <body>
-<div class="container-fluid mt-3">
-    <h2 class="mb-3 text-center" style="font-family: Georgia, serif; color: #d4af37; text-shadow: 0 0 10px rgba(212,175,55,0.3);">OSTRAKA: DESPERATE NEGOTIATION</h2>
+<div class="container mt-4">
+    <h1 class="text-center mb-4">God-View: SAGA Maintenance Dashboard</h1>
+    
     <div class="row">
-        
-        <!-- Left Column: Map & Chat -->
-        <div class="col-lg-8">
+        <!-- Engine Controls -->
+        <div class="col-md-4">
             <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span id="sectorLabel">Sector 1 - Local Battlemap (100x100)</span>
-                </div>
-                <div class="card-body p-0">
-                    <div id="battlemapContainer">
-                        <canvas id="battlemapCanvas" width="600" height="600"></canvas>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span>AI Facilitator Terminal</span>
-                    <span id="loadingSpinner" style="display:none;" class="spinner-border spinner-border-sm text-warning" role="status"></span>
-                </div>
-                <div class="card-body p-0">
-                    <div id="chatOutput">
-                        <div class="llm-narrative">System Initialized. The Drift awaits your command.</div>
-                    </div>
-                    <div class="p-2 bg-dark border-top border-secondary d-flex">
-                        <input type="text" id="chatInput" class="form-control bg-dark text-light border-secondary" placeholder="State your intent... (e.g. 'I attack the bandit')">
-                        <button class="btn btn-warning ms-2" onclick="sendChat()" style="font-weight:bold; color:#000;">Execute</button>
-                    </div>
+                <div class="card-header text-warning">ENGINE CONTROLS</div>
+                <div class="card-body text-center">
+                    <p class="text-light">Current Tick: <span id="currentTick" class="fs-4 text-warning">0</span></p>
+                    <button class="btn btn-warning w-100" onclick="triggerTick()">TRIGGER WORLD TICK</button>
+                    <hr class="border-secondary">
+                    <a href="/play" class="btn btn-outline-info w-100" target="_blank">Open Player View (/play)</a>
                 </div>
             </div>
         </div>
-
-        <!-- Right Column: Character Sheet -->
-        <div class="col-lg-4">
-            <div class="card border-warning">
-                <div class="card-header bg-warning text-dark" style="font-weight: 900;">Biological Chassis</div>
+        
+        <!-- Global Metrics -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header text-info">GLOBAL METRICS</div>
                 <div class="card-body">
-                    <h4 id="charName" class="text-warning text-uppercase">Loading...</h4>
-                    <p class="mb-2 text-secondary"><span id="charOrigin">Origin</span> | Class: <span id="charClass">None</span> | Lvl <span id="charLevel">1</span> (<span id="charXP">0</span> XP)</p>
-                    
-                    <div class="d-flex justify-content-between align-items-center mb-3 p-2" style="background:#111; border:1px solid #333;">
-                        <div><small>SHARDS</small><br><span id="charShards" class="text-neon fs-5">0</span></div>
-                        <div class="text-end"><small>GEAR TAX</small><br><span id="charLoadout" class="text-danger fs-5">Light</span></div>
-                    </div>
-                    
-                    <div class="row g-2 mb-3">
-                        <div class="col-4">
-                            <div class="stat-box">
-                                <div class="text-danger" style="font-size:10px;">HP</div>
-                                <div id="charHP" class="stat-val text-danger">0</div>
+                    <div class="row">
+                        <div class="col-sm-4">
+                            <div class="metric-box">
+                                <div>Total Burgs</div>
+                                <div id="totalBurgs" class="metric-val text-info">0</div>
                             </div>
                         </div>
-                        <div class="col-4">
-                            <div class="stat-box">
-                                <div class="text-warning" style="font-size:10px;">STAMINA</div>
-                                <div id="charSTA" class="stat-val text-warning">0</div>
+                        <div class="col-sm-4">
+                            <div class="metric-box border-danger">
+                                <div class="text-danger">Avg Chaos</div>
+                                <div id="avgChaos" class="metric-val text-danger">0.0</div>
                             </div>
                         </div>
-                        <div class="col-4">
-                            <div class="stat-box">
-                                <div class="text-info" style="font-size:10px;">FOCUS</div>
-                                <div id="charFOC" class="stat-val text-info">0</div>
+                        <div class="col-sm-4">
+                            <div class="metric-box border-warning">
+                                <div class="text-warning">Prison Integrity</div>
+                                <div id="prisonIntegrity" class="metric-val text-warning">10000</div>
                             </div>
                         </div>
-                    </div>
-                    
-                    <h6 class="text-muted border-bottom border-secondary pb-1 mb-2" style="font-size:12px;">SOURCE CODE (STATS)</h6>
-                    <div class="row g-1 mb-3" style="font-size:13px; font-family:monospace;">
-                        <div class="col-6"><span class="text-secondary">MIG:</span> <span id="statMIG">0</span></div>
-                        <div class="col-6"><span class="text-secondary">KNO:</span> <span id="statKNO">0</span></div>
-                        <div class="col-6"><span class="text-secondary">FIN:</span> <span id="statFIN">0</span></div>
-                        <div class="col-6"><span class="text-secondary">AWA:</span> <span id="statAWA">0</span></div>
-                        <div class="col-6"><span class="text-secondary">REF:</span> <span id="statREF">0</span></div>
-                        <div class="col-6"><span class="text-secondary">INT:</span> <span id="statINT">0</span></div>
-                        <div class="col-6"><span class="text-secondary">END:</span> <span id="statEND">0</span></div>
-                        <div class="col-6"><span class="text-secondary">LOG:</span> <span id="statLOG">0</span></div>
-                        <div class="col-6"><span class="text-secondary">FOR:</span> <span id="statFOR">0</span></div>
-                        <div class="col-6"><span class="text-secondary">CHA:</span> <span id="statCHA">0</span></div>
-                        <div class="col-6"><span class="text-secondary">VIT:</span> <span id="statVIT">0</span></div>
-                        <div class="col-6"><span class="text-secondary">WIL:</span> <span id="statWIL">0</span></div>
-                    </div>
-                    
-                    <h6 class="text-muted border-bottom border-secondary pb-1 mb-2" style="font-size:12px;">INVENTORY & TRAITS</h6>
-                    <div style="font-size:13px; margin-bottom:15px;">
-                        <div><span class="text-secondary">Items:</span> <span id="charInv">None</span></div>
-                        <div><span class="text-secondary">Skills:</span> <span id="charSkills">None</span></div>
                     </div>
                 </div>
             </div>
             
             <div class="card">
-                <div class="card-header" style="font-size:12px;">ACTIONS</div>
-                <div class="card-body p-2">
-                    <button class="btn btn-dark border-secondary w-100 btn-sm" onclick="visualAction('WAIT', 'WAIT')">⏳ Wait (Pass Time)</button>
+                <div class="card-header text-danger">FACTION & ECOLOGY SUMMARY</div>
+                <div class="card-body">
+                    <pre id="adminLog" style="color: #ccc; max-height: 300px; overflow-y: auto;">Awaiting data...</pre>
                 </div>
             </div>
         </div>
@@ -136,185 +70,44 @@
 </div>
 
 <script>
-    // PRNG
-    function seededRandom(seed) {
-        var x = Math.sin(seed++) * 10000;
-        return x - Math.floor(x);
-    }
-
-    function renderBattlemap(state) {
-        const canvas = document.getElementById('battlemapCanvas');
-        const ctx = canvas.getContext('2d');
-        
-        const TILE_SIZE = 6;
-        const GRID_SIZE = 100;
-        
-        let currentSeed = state.seed || 12345;
-        document.getElementById('sectorLabel').innerText = `Cluster ${state.cluster_id || 13} - Local Battlemap (100x100)`;
-        
-        const colorMap = {
-            'Temperate': ['#1a2e12', '#233d18', '#2f5221', '#0e170a'],
-            'Chaos Wastes': ['#2a1a3a', '#3b244d', '#4d2d63', '#1e112b'],
-            'Obsidian Expanse': ['#111', '#1a1a1a', '#222', '#0a0a0a']
-        };
-        const palette = colorMap[state.base_biome] || colorMap['Temperate'];
-        
-        // Draw Terrain
-        for (let x = 0; x < GRID_SIZE; x++) {
-            for (let y = 0; y < GRID_SIZE; y++) {
-                let val = seededRandom(currentSeed + (x * 100) + y);
-                
-                let color = palette[0];
-                if (val > 0.8) color = palette[1];
-                if (val > 0.95) color = palette[2];
-                if (val < 0.05) color = palette[3]; // Obstructions
-                
-                ctx.fillStyle = color;
-                ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            }
-        }
-        
-        // Draw Player (Blue)
-        let px = state.player_x || 50;
-        let py = state.player_y || 50;
-        ctx.fillStyle = '#00ffff';
-        ctx.fillRect(px * TILE_SIZE, py * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-        
-        // Draw Paragons (Red)
-        if (state.paragons) {
-            state.paragons.forEach(p => {
-                let ex = p.local_x || 55;
-                let ey = p.local_y || 55;
-                ctx.fillStyle = '#ff4d4d';
-                ctx.fillRect(ex * TILE_SIZE, ey * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            });
-        }
-    }
-
-    async function loadSectorData() {
+    async function loadStats() {
         try {
-            // Player starts at location_id = 1 usually. Query the state.
-            const res = await fetch('/api/ttrpg/query?location_type=Burg&location_id=1&cluster_id=13');
-            const state = await res.json();
-            
-            // Add fake player pos just for visualization if not returned by API
-            if(!state.player_x) state.player_x = 50;
-            if(!state.player_y) state.player_y = 50;
-            
-            // Add fake paragons if none returned
-            if(!state.paragons) {
-                state.paragons = [{local_x: 55, local_y: 45}, {local_x: 48, local_y: 60}];
-            }
-            
-            renderBattlemap(state);
-        } catch(e) { console.error("Map Load Error", e); }
-    }
-
-    async function refreshCharData() {
-        try {
-            const res = await fetch('/api/ttrpg/get_character?id=1');
-            const data = await res.json();
-            if(data.status === 'success') {
-                document.getElementById('charName').innerText = data.name;
-                document.getElementById('charOrigin').innerText = data.origin;
-                document.getElementById('charLevel').innerText = data.level;
-                document.getElementById('charXP').innerText = data.xp;
-                document.getElementById('charShards').innerText = data.shards;
-                document.getElementById('charLoadout').innerText = data.loadout;
-                document.getElementById('charHP').innerText = data.health;
-                document.getElementById('charSTA').innerText = data.stamina;
-                document.getElementById('charFOC').innerText = data.focus;
-                
-                document.getElementById('statMIG').innerText = data.stats.might;
-                document.getElementById('statFIN').innerText = data.stats.finesse;
-                document.getElementById('statREF').innerText = data.stats.reflex;
-                document.getElementById('statEND').innerText = data.stats.endurance;
-                document.getElementById('statFOR').innerText = data.stats.fortitude;
-                document.getElementById('statVIT').innerText = data.stats.vitality;
-                document.getElementById('statKNO').innerText = data.stats.knowledge;
-                document.getElementById('statAWA').innerText = data.stats.awareness;
-                document.getElementById('statINT').innerText = data.stats.intuition;
-                document.getElementById('statLOG').innerText = data.stats.logic;
-                document.getElementById('statCHA').innerText = data.stats.charm;
-                document.getElementById('statWIL').innerText = data.stats.willpower;
-                
-                let inv = data.inventory;
-                try { inv = JSON.parse(inv); } catch(e){}
-                document.getElementById('charInv').innerText = Array.isArray(inv) ? inv.map(i => i.name || i).join(', ') : 'None';
-                
-                let skills = data.skills;
-                try { skills = JSON.parse(skills); } catch(e){}
-                document.getElementById('charSkills').innerText = Array.isArray(skills) ? skills.join(', ') : 'None';
-            }
-        } catch(e) { console.error("Sheet error", e); }
-    }
-
-    async function sendChat(messageOverride=null) {
-        const input = document.getElementById('chatInput');
-        const msg = messageOverride || input.value;
-        if(!msg) return;
-        
-        const out = document.getElementById('chatOutput');
-        out.innerHTML += `<div class="player-msg">> ${msg}</div>`;
-        input.value = '';
-        out.scrollTop = out.scrollHeight;
-        
-        document.getElementById('loadingSpinner').style.display = 'block';
-        
-        const fd = new FormData();
-        fd.append('message', msg);
-        fd.append('player_id', 1);
-        
-        try {
-            const res = await fetch('/api/ttrpg/chat', { method: 'POST', body: fd });
+            const res = await fetch('/api/admin/stats');
             const data = await res.json();
             
-            let html = `<div class="mt-2 mb-3">`;
-            if(data.execution_results && data.execution_results.length > 0) {
-                data.execution_results.forEach(r => {
-                    html += `<div class="system-math">[SYS] ${r.message || r.status}</div>`;
-                });
-            }
-            html += `<div class="llm-narrative">${data.response}</div></div>`;
-            out.innerHTML += html;
-            out.scrollTop = out.scrollHeight;
-            refreshCharData();
+            document.getElementById('currentTick').innerText = data.tick;
+            document.getElementById('totalBurgs').innerText = data.total_burgs;
+            document.getElementById('avgChaos').innerText = data.avg_chaos.toFixed(1);
+            document.getElementById('prisonIntegrity').innerText = data.avg_prison_integrity.toFixed(0);
+            
+            let logHtml = `ACTIVE STORY HOOKS:\n`;
+            data.hooks.forEach(h => logHtml += `- [${h.status}] ${h.hook_category}: ${h.description}\n`);
+            
+            logHtml += `\nFACTIONS:\n`;
+            data.cults.forEach(c => logHtml += `- Cults in Burg ${c.location_id}: ${c.new_members.toFixed(1)} members, ${c.priests.toFixed(1)} priests\n`);
+            
+            document.getElementById('adminLog').innerText = logHtml;
         } catch(e) {
-            out.innerHTML += `<div class="text-danger">Error: ${e}</div>`;
+            console.error(e);
+            document.getElementById('adminLog').innerText = "Error loading stats: " + e;
         }
-        document.getElementById('loadingSpinner').style.display = 'none';
     }
     
-    function visualAction(intentType, tactic) {
-        let msg = "";
-        if(intentType === 'COMBAT_TACTIC') msg = `I use the ${tactic} combat tactic against the enemy.`;
-        if(intentType === 'WAIT') msg = `I wait and pass the time.`;
-        sendChat(msg);
+    async function triggerTick() {
+        try {
+            const res = await fetch('/api/ttrpg/tick', {method: 'POST'});
+            const data = await res.json();
+            if(data.status === 'success') {
+                loadStats();
+            }
+        } catch(e) {
+            console.error(e);
+        }
     }
 
     document.addEventListener("DOMContentLoaded", function() {
-        document.getElementById('chatInput').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') sendChat();
-        });
-        
-        const canvas = document.getElementById('battlemapCanvas');
-        if (canvas) {
-            canvas.addEventListener('click', function(e) {
-                const rect = canvas.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
-                
-                // Canvas is 600x600, Grid is 100x100. TILE_SIZE is 6.
-                const tileX = Math.floor(x / 6);
-                const tileY = Math.floor(y / 6);
-                
-                const msg = `I move to coordinates (${tileX}, ${tileY}) on the map.`;
-                sendChat(msg);
-            });
-        }
-        
-        refreshCharData();
-        loadSectorData();
+        loadStats();
+        setInterval(loadStats, 10000); // Poll every 10s
     });
 </script>
 </body>
