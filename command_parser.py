@@ -284,9 +284,9 @@ def create_character(name, origin, skill):
     conn.close()
     return {"status": "success", "character_id": char_id, "name": name, "stats": stats, "derived": {"hp": health, "stamina": stamina, "focus": focus}}
 
-def roll_dice(paragon_id, stat_name, difficulty):
+def roll_dice(paragon_id, stat_name, difficulty, skill_check=None):
     """
-    Pulls a stat from a Paragon, rolls a d20 + modifier, compares to difficulty.
+    Pulls a stat from a Paragon or Player, rolls a d20 + modifier + skill bonus.
     """
     valid_stats = ['might', 'endurance', 'finesse', 'reflex', 'vitality', 'fortitude', 
                    'knowledge', 'logic', 'awareness', 'intuition', 'charm', 'willpower']
@@ -296,17 +296,40 @@ def roll_dice(paragon_id, stat_name, difficulty):
         
     conn = get_db()
     c = conn.cursor()
-    c.execute(f"SELECT name, {stat_name.lower()} FROM paragons WHERE id = ?", (paragon_id,))
+    # Try player first
+    c.execute(f"SELECT name, {stat_name.lower()}, skills FROM player_characters WHERE id = ?", (paragon_id,))
     row = c.fetchone()
+    
+    if not row:
+        # Fallback to paragon (paragons don't have JSON skills in our current schema yet, so default to empty)
+        c.execute(f"SELECT name, {stat_name.lower()} FROM paragons WHERE id = ?", (paragon_id,))
+        row = c.fetchone()
+        if not row:
+            conn.close()
+            return {"error": "Paragon/Player not found"}
+        name, stat_val = row
+        skills_json = "[]"
+    else:
+        name, stat_val, skills_json = row
+        
     conn.close()
+    
+    skills = []
+    if skills_json:
+        try:
+            skills = json.loads(skills_json)
+        except Exception:
+            pass
     
     if not row:
         return {"error": "Paragon not found"}
         
-    name, stat_val = row
     modifier = (stat_val - 10) // 2
+    
+    skill_bonus = 2 if skill_check in skills else 0
+    
     roll = random.randint(1, 20)
-    total = roll + modifier
+    total = roll + modifier + skill_bonus
     
     success = total >= difficulty
     is_crit = (roll == 20)
@@ -320,6 +343,7 @@ def roll_dice(paragon_id, stat_name, difficulty):
         "stat": stat_name,
         "roll": roll,
         "modifier": modifier,
+        "skill_bonus": skill_bonus,
         "total": total,
         "difficulty": difficulty,
         "success": success,
@@ -437,6 +461,24 @@ def execute_action(actor_id, action_type, target_id=None, **kwargs):
         
         c.execute("UPDATE player_characters SET inventory = ?, loadout = ? WHERE id = ?", (json.dumps(inv), loadout, target_id))
         result['message'] = f"PC {target_id} looted {item.get('name', 'Item')}. Current Loadout: {loadout}."
+        
+    elif action_type == 'USE_ITEM':
+        item_name = kwargs.get('item_name')
+        c.execute("SELECT inventory FROM player_characters WHERE id = ?", (target_id,))
+        row = c.fetchone()
+        inv = json.loads(row[0]) if row and row[0] else []
+        
+        item = next((i for i in inv if isinstance(i, dict) and i.get('name') == item_name), None)
+        if item:
+            inv.remove(item)
+            if 'heal' in item:
+                c.execute("UPDATE player_characters SET health = MIN(max_health, health + ?) WHERE id = ?", (item['heal'], target_id))
+            
+            loadout = calculate_gear_tax(inv)
+            c.execute("UPDATE player_characters SET inventory = ?, loadout = ? WHERE id = ?", (json.dumps(inv), loadout, target_id))
+            result['message'] = f"Used {item_name}. Effect applied. Loadout is now {loadout}."
+        else:
+            result = {"status": "error", "message": "Item not found in inventory."}
         
     elif action_type == 'TRANSACT':
         amount = kwargs.get('amount', 0)

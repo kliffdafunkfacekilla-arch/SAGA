@@ -157,6 +157,38 @@ def ttrpg_query():
     state = command_parser.query_local_state(loc_type, loc_id, cluster_idx)
     return jsonify(state)
 
+@app.route('/api/ttrpg/get_character', methods=['GET'])
+def get_character():
+    char_id = request.args.get('id', 1, type=int)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("SELECT * FROM player_characters WHERE id = ?", (char_id,))
+    row = c.fetchone()
+    conn.close()
+    
+    if not row:
+        return jsonify({"status": "error", "message": "Character not found"}), 404
+        
+    data = dict(row)
+    # Reformat stats nicely for frontend
+    data['stats'] = {
+        'might': data.get('might', 0),
+        'finesse': data.get('finesse', 0),
+        'reflex': data.get('reflex', 0),
+        'endurance': data.get('endurance', 0),
+        'fortitude': data.get('fortitude', 0),
+        'vitality': data.get('vitality', 0),
+        'knowledge': data.get('knowledge', 0),
+        'awareness': data.get('awareness', 0),
+        'intuition': data.get('intuition', 0),
+        'logic': data.get('logic', 0),
+        'charm': data.get('charm', 0),
+        'willpower': data.get('willpower', 0)
+    }
+    data['status'] = 'success'
+    return jsonify(data)
+
 @app.route('/api/ttrpg/create_character', methods=['POST'])
 def ttrpg_create_character():
     data = request.json
