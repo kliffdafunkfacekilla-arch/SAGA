@@ -1,7 +1,8 @@
 import sqlite3
+import config
 
 def setup_database():
-    conn = sqlite3.connect('okasha_world.db')
+    conn = sqlite3.connect(config.ACTIVE_DB_PATH)
     cursor = conn.cursor()
     
     # Drop the old table to replace it with the new structured one
@@ -40,11 +41,28 @@ def setup_database():
     
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS days_of_week (
-        day_order INTEGER PRIMARY KEY,
-        day_name TEXT
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        order_index INTEGER
     );
     ''')
     
+    # 1.5. GAME SETTINGS
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS game_settings (
+        setting_key TEXT PRIMARY KEY,
+        setting_value TEXT
+    );
+    ''')
+    
+    cursor.execute("SELECT COUNT(*) FROM game_settings")
+    if cursor.fetchone()[0] == 0:
+        cursor.executemany("INSERT INTO game_settings VALUES (?, ?)", [
+            ('difficulty', 'hard'),
+            ('combat_frequency', '0.7'),
+            ('adult_content', 'restricted')
+        ])
+
     # 1. CLIMATE & COSMOLOGY: Link cells to the current Aether state
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS world_state (
@@ -128,6 +146,33 @@ def setup_database():
             lon REAL
         )
     ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS cult_forces (
+            id INTEGER PRIMARY KEY,
+            location_id INTEGER,
+            cluster_id INTEGER,
+            local_x INTEGER,
+            local_y INTEGER,
+            type TEXT,
+            strength INTEGER,
+            details TEXT
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS paragons (
+            id INTEGER PRIMARY KEY,
+            name TEXT,
+            type TEXT,
+            icon TEXT,
+            x_coord REAL,
+            y_coord REAL,
+            lat REAL,
+            lon REAL,
+            note TEXT
+        )
+    ''')
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS markers (
@@ -184,11 +229,12 @@ def setup_database():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             location_type TEXT,
             location_id INTEGER,
-            cluster_id INTEGER, -- 1 to 25
+            cluster_id INTEGER,
             base_biome TEXT,
             feature_archetype TEXT,
             seed INTEGER,
-            discovered BOOLEAN DEFAULT 1
+            discovered BOOLEAN DEFAULT 1,
+            tags TEXT
         )
     ''')
 
@@ -200,6 +246,7 @@ def setup_database():
             local_y INTEGER,
             change_type TEXT,
             details TEXT,
+            tags TEXT,
             FOREIGN KEY(tile_id) REFERENCES map_tiles(id)
         )
     ''')

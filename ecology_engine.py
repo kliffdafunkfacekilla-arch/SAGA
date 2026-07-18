@@ -1,3 +1,4 @@
+import config
 import sqlite3
 
 def update_cell_ecology(cursor, cell_id, aether_mod, is_burg=False):
@@ -64,4 +65,4 @@ def run_ecology_simulation(db_path):
     print("Ecology simulation tick complete.")
 
 if __name__ == "__main__":
-    run_ecology_simulation('okasha_world.db')
+    run_ecology_simulation(config.ACTIVE_DB_PATH)

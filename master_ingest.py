@@ -1,3 +1,4 @@
+import config
 import sqlite3
 import csv
 import os
@@ -340,7 +341,7 @@ def master_ingest(db_path, burgs_csv, goods_csv, states_csv, relations_csv, reli
 
 if __name__ == "__main__":
     master_ingest(
-        'okasha_world.db', 
+        config.ACTIVE_DB_PATH, 
         'data/Okasha Burgs 2026-06-26-06-56.csv', 
         'data/Okasha Goods 2026-06-26-06-59.csv',
         'data/Okasha States 2026-06-26-06-57.csv',

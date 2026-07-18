@@ -8,10 +8,11 @@ import llm_gm
 import engine
 import ai_director
 import narrative_engine
+import config
 
 app = Flask(__name__)
 CORS(app)
-DB_PATH = 'okasha_world.db'
+DB_PATH = config.ACTIVE_DB_PATH
 
 def query_db(query, args=(), one=False):
     if not os.path.exists(DB_PATH):

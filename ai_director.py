@@ -1,3 +1,4 @@
+import config
 """
 ai_director.py
 
@@ -32,7 +33,7 @@ The air grows cold. A cartel enforcer steps out from the shadowed alley, clutchi
 [EXECUTE: SPAWN_ENTITY, tile_id: 1, x: 55, y: 50, entity_type: 'NPC', details: '{"name": "Cartel Enforcer", "hook": "Looking to collect a debt"}']
 """
 
-def pulse_scene(player_id, action_context="", db_path='okasha_world.db'):
+def pulse_scene(player_id, action_context="", db_path=config.ACTIVE_DB_PATH):
     """
     Synthesizes the local environment and triggers an AI Director event.
     """

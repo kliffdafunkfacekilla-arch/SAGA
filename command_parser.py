@@ -10,8 +10,12 @@ import random
 import json
 import narrative_engine
 import math
+import interaction_matrix
+from tag_manager import TagManager
+import config
 
-DB_PATH = 'okasha_world.db'
+def get_db():
+    return sqlite3.connect(config.ACTIVE_DB_PATH)
 
 def calculate_gear_tax(inventory_list):
     """
@@ -181,9 +185,36 @@ def query_local_state(location_type, location_id, cluster_id=13):
             state['cluster_id'] = cluster_id
             
             # Fetch Deltas
+            # Fetch Deltas
             if row[4]:
                 c.execute("SELECT local_x, local_y, change_type, details FROM map_deltas WHERE tile_id = ?", (row[4],))
                 state['deltas'] = [{'x': d[0], 'y': d[1], 'type': d[2], 'details': d[3]} for d in c.fetchall()]
+                
+                # WIDENING EYE: Perception Check for Hidden Cultists
+                c.execute("SELECT awareness, skills FROM player_characters WHERE id = 1")
+                pc = c.fetchone()
+                if pc:
+                    aw, skills_json = pc
+                    skills = []
+                    if skills_json:
+                        try:
+                            skills = json.loads(skills_json)
+                        except:
+                            pass
+                    modifier = (aw - 10) // 2
+                    skill_bonus = 2 if 'perception' in skills or 'awareness' in skills else 0
+                    roll = random.randint(1, 20) + modifier + skill_bonus
+                    
+                    if roll >= 12: # Difficulty 12 to see hidden cultists
+                        c.execute("SELECT local_x, local_y, type, details FROM cult_forces WHERE location_id = ? AND cluster_id = ?", (location_id, cluster_id))
+                        cultists = c.fetchall()
+                        for cultist in cultists:
+                            state['deltas'].append({
+                                'x': cultist[0], 
+                                'y': cultist[1], 
+                                'type': 'CULT_FORCE', 
+                                'details': cultist[3]
+                            })
             else:
                 state['deltas'] = []
                 
@@ -284,9 +315,9 @@ def create_character(name, origin, skill):
     conn.close()
     return {"status": "success", "character_id": char_id, "name": name, "stats": stats, "derived": {"hp": health, "stamina": stamina, "focus": focus}}
 
-def roll_dice(paragon_id, stat_name, difficulty, skill_check=None):
+def roll_dice(paragon_id, stat_name, difficulty, skill_check=None, focus_surge=False):
     """
-    Pulls a stat from a Paragon or Player, rolls a d20 + modifier + skill bonus.
+    Pulls a stat from a Paragon or Player, rolls a d20 + modifier + skill bonus + focus surge.
     """
     valid_stats = ['might', 'endurance', 'finesse', 'reflex', 'vitality', 'fortitude', 
                    'knowledge', 'logic', 'awareness', 'intuition', 'charm', 'willpower']
@@ -297,9 +328,10 @@ def roll_dice(paragon_id, stat_name, difficulty, skill_check=None):
     conn = get_db()
     c = conn.cursor()
     # Try player first
-    c.execute(f"SELECT name, {stat_name.lower()}, skills FROM player_characters WHERE id = ?", (paragon_id,))
+    c.execute(f"SELECT name, {stat_name.lower()}, skills, focus FROM player_characters WHERE id = ?", (paragon_id,))
     row = c.fetchone()
     
+    focus_bonus = 0
     if not row:
         # Fallback to paragon (paragons don't have JSON skills in our current schema yet, so default to empty)
         c.execute(f"SELECT name, {stat_name.lower()} FROM paragons WHERE id = ?", (paragon_id,))
@@ -310,7 +342,11 @@ def roll_dice(paragon_id, stat_name, difficulty, skill_check=None):
         name, stat_val = row
         skills_json = "[]"
     else:
-        name, stat_val, skills_json = row
+        name, stat_val, skills_json, focus_val = row
+        if focus_surge and focus_val >= 1:
+            c.execute("UPDATE player_characters SET focus = focus - 1 WHERE id = ?", (paragon_id,))
+            conn.commit()
+            focus_bonus = 2
         
     conn.close()
     
@@ -329,7 +365,7 @@ def roll_dice(paragon_id, stat_name, difficulty, skill_check=None):
     skill_bonus = 2 if skill_check in skills else 0
     
     roll = random.randint(1, 20)
-    total = roll + modifier + skill_bonus
+    total = roll + modifier + skill_bonus + focus_bonus
     
     success = total >= difficulty
     is_crit = (roll == 20)
@@ -344,6 +380,7 @@ def roll_dice(paragon_id, stat_name, difficulty, skill_check=None):
         "roll": roll,
         "modifier": modifier,
         "skill_bonus": skill_bonus,
+        "focus_bonus": focus_bonus,
         "total": total,
         "difficulty": difficulty,
         "success": success,
@@ -358,6 +395,36 @@ def execute_action(actor_id, action_type, target_id=None, **kwargs):
     """
     conn = get_db()
     c = conn.cursor()
+    
+    # --- TAG-BASED MATRIX CHECK ---
+    # 1. Get Actor's Location Tags
+    query_id = actor_id if actor_id else 1
+    c.execute("SELECT location_id, cluster_id FROM player_characters WHERE id = ?", (query_id,))
+    p_row = c.fetchone()
+    
+    if p_row:
+        loc_id, cluster = p_row
+        c.execute("SELECT id FROM map_tiles WHERE location_id = ? AND cluster_id = ?", (loc_id, cluster))
+        tile_row = c.fetchone()
+        
+        if tile_row:
+            tile_id = tile_row[0]
+            # 2. Map Action to a Power
+            power_tag = interaction_matrix.map_action_to_power(action_type)
+            
+            # 3. Resolve Interaction
+            outcome = TagManager.resolve(power_tag, tile_id, 'map_tiles', c)
+            
+            if outcome == 'BLOCK':
+                conn.close()
+                return {"status": "error", "message": "The environment forbids this action (Matrix: BLOCK)."}
+            elif outcome == 'IGNITE':
+                TagManager.add_state(tile_id, 'map_tiles', 'Burning', c)
+                result['message'] = "The area catches fire."
+            elif outcome == 'SHATTER':
+                result['message'] = "The environment shatters."
+    # --- END TAG-BASED MATRIX CHECK ---
+    
     result = {"status": "success", "action": action_type}
     
     if action_type == 'WALK':

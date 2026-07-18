@@ -31,6 +31,7 @@ Enforce Ludonarrative Grounding: All entities are "Biological Chassis." Statisti
 
 Do NOT invent mechanical consequences (like taking damage or losing items) that are not explicitly stated in the System Outcome. Just narrate what the System Outcome dictates.
 Whenever a player acquires an item or spends money, describe the physical sensation of the object or the weight of the shards in their inventory.
+Before resolving actions, identify the tags of the current room and verify if the action is supported by the interaction matrix.
 """
 
 def parse_llm_commands(response_text):

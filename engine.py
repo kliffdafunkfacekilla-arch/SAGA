@@ -1,3 +1,4 @@
+import config
 """
 engine.py
 
@@ -314,7 +315,7 @@ def run_simulation_tick(famine_faction=None):
     
     if famine_faction:
         print(f"Inducing Famine in {famine_faction} for testing...")
-        conn = sqlite3.connect('okasha_world.db')
+        conn = sqlite3.connect(config.ACTIVE_DB_PATH)
         c = conn.cursor()
         c.execute("""
             UPDATE burg_stocks 
@@ -325,7 +326,7 @@ def run_simulation_tick(famine_faction=None):
         conn.commit()
         conn.close()
     
-    run_world_tick('okasha_world.db')
+    run_world_tick(config.ACTIVE_DB_PATH)
     
     save_current_tick(tick + 1)
 

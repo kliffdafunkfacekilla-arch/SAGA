@@ -1,8 +1,9 @@
 import sqlite3
 import random
 import command_parser
+import config
 
-DB_PATH = 'okasha_world.db'
+DB_PATH = config.ACTIVE_DB_PATH
 
 # The Clash Matrix Body/Mind pairings
 CLASH_MATRIX = {

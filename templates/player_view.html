@@ -5,7 +5,13 @@
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <div id="hud">HP: <span id="hp">20</span> | Stamina: <span id="stamina">10</span> | Focus: <span id="focus">10</span></div>
+    <div id="hud">
+        HP: <span id="hp">20</span> | Stamina: <span id="stamina">10</span> | Focus: <span id="focus">10</span>
+        <div style="display:flex; gap: 20px; font-size: 0.9em; margin-top: 5px;">
+            <div><strong>Inventory:</strong><ul id="inventoryList" style="margin:0; padding-left:20px;"></ul></div>
+            <div><strong>Skills:</strong><ul id="skillsList" style="margin:0; padding-left:20px;"></ul></div>
+        </div>
+    </div>
     <div id="app">
         <canvas id="battleMap" width="500" height="500"></canvas>
         <div id="terminal">
