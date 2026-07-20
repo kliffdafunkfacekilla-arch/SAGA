@@ -1,0 +1,307 @@
+from PyQt6.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, 
+                             QLabel, QPushButton, QTextEdit, QLineEdit, 
+                             QGraphicsView, QGraphicsScene, QFrame, QStackedWidget,
+                             QSpinBox, QComboBox, QFormLayout)
+from PyQt6.QtCore import Qt, QRectF
+from PyQt6.QtGui import QBrush, QColor, QPen, QPixmap
+
+class BattleMapCanvas(QGraphicsView):
+    """
+    Renders the 100x100 local battle map dynamically.
+    Uses generic rendering right now, will map to sprites if available.
+    """
+    def __init__(self):
+        super().__init__()
+        self.scene = QGraphicsScene()
+        self.setScene(self.scene)
+        self.setMinimumHeight(350)
+        self.setBackgroundBrush(QBrush(QColor("#0a0a0a")))
+        self.tile_size = 15
+        self.player_x = 50
+        self.player_y = 50
+        
+    def load_matrix(self, battlemap_data: dict, px: int, py: int):
+        self.scene.clear()
+        self.player_x = px
+        self.player_y = py
+        
+        grid = battlemap_data["grid"]
+        width = battlemap_data["width"]
+        height = battlemap_data["height"]
+        
+        color_empty = QColor("#1a1a1a")
+        color_obstacle = QColor("#2b4a2b") 
+        color_water = QColor("#1a2a5a")
+        color_poi = QColor("#8a1a1a")
+        color_road = QColor("#555544")
+        color_npc = QColor("#4444FF")
+        color_enemy = QColor("#FF4444")
+        pen = QPen(QColor("#222"))
+        
+        vx_start = max(0, self.player_x - 15)
+        vx_end = min(width, self.player_x + 15)
+        vy_start = max(0, self.player_y - 15)
+        vy_end = min(height, self.player_y + 15)
+        
+        for y in range(vy_start, vy_end):
+            for x in range(vx_start, vx_end):
+                tile_val = grid[y][x]
+                brush = QBrush(color_empty)
+                if tile_val == 1: brush = QBrush(color_obstacle)
+                elif tile_val == 2: brush = QBrush(color_water)
+                elif tile_val == 3: brush = QBrush(color_poi)
+                elif tile_val == 4: brush = QBrush(color_road)
+                
+                draw_x = (x - vx_start) * self.tile_size
+                draw_y = (y - vy_start) * self.tile_size
+                self.scene.addRect(draw_x, draw_y, self.tile_size, self.tile_size, pen, brush)
+                
+                if x == self.player_x and y == self.player_y:
+                    self.scene.addEllipse(draw_x+2, draw_y+2, self.tile_size-4, self.tile_size-4, QPen(Qt.GlobalColor.white), QBrush(Qt.GlobalColor.green))
+
+        # Draw Entities
+        entities = battlemap_data.get("entities", [])
+        for ent in entities:
+            ex = ent.get("x", 0)
+            ey = ent.get("y", 0)
+            if vx_start <= ex < vx_end and vy_start <= ey < vy_end:
+                draw_x = (ex - vx_start) * self.tile_size
+                draw_y = (ey - vy_start) * self.tile_size
+                
+                ent_color = color_enemy if ent.get("type") == "Enemy" else color_npc
+                self.scene.addEllipse(draw_x+2, draw_y+2, self.tile_size-4, self.tile_size-4, QPen(Qt.GlobalColor.white), QBrush(ent_color))
+
+class CharacterHUD(QFrame):
+    """
+    Displays the character sheet (HP, Stamina, Focus) using graphical elements.
+    """
+    def __init__(self):
+        super().__init__()
+        self.setStyleSheet("""
+            QFrame {
+                background-color: #1a1a1a;
+                border: 2px solid #555;
+                border-radius: 5px;
+                padding: 10px;
+            }
+            QLabel { color: #ddd; font-weight: bold; font-family: monospace; font-size: 14px; border: none; }
+        """)
+        self.setFixedWidth(250)
+        
+        layout = QVBoxLayout()
+        self.name_label = QLabel("Player Name")
+        self.name_label.setStyleSheet("font-size: 18px; color: #44FF44; margin-bottom: 10px;")
+        
+        self.hp_label = QLabel("HP: --/--")
+        self.stamina_label = QLabel("Stamina: --/--")
+        self.focus_label = QLabel("Focus: --/--")
+        self.trauma_label = QLabel("Trauma Tokens: 0")
+        
+        layout.addWidget(self.name_label)
+        layout.addWidget(self.hp_label)
+        layout.addWidget(self.stamina_label)
+        layout.addWidget(self.focus_label)
+        layout.addWidget(self.trauma_label)
+        layout.addStretch()
+        
+        self.setLayout(layout)
+        
+    def update_stats(self, stats: dict):
+        self.name_label.setText(stats.get("name", "Player"))
+        self.hp_label.setText(f"HP: {stats.get('hp', 0)} / {stats.get('max_hp', 0)}")
+        self.stamina_label.setText(f"Stamina: {stats.get('stamina', 0)} / {stats.get('max_stamina', 0)}")
+        self.focus_label.setText(f"Focus: {stats.get('focus', 0)} / {stats.get('max_focus', 0)}")
+        self.trauma_label.setText(f"Trauma Tokens: {stats.get('trauma', 0)}")
+
+
+class MapCanvas(QWidget):
+    def __init__(self, bus):
+        super().__init__()
+        self.bus = bus
+        
+        main_layout = QHBoxLayout()
+        
+        # Left Panel (Map + Log + Input)
+        left_layout = QVBoxLayout()
+        
+        self.title = QLabel("S.A.G.A. Engine VTT")
+        self.title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.title.setStyleSheet("font-size: 20px; font-weight: bold; color: #44FF44; margin-bottom: 5px;")
+        
+        self.battle_map = BattleMapCanvas()
+        
+        self.log_view = QTextEdit()
+        self.log_view.setReadOnly(True)
+        self.log_view.setStyleSheet("""
+            QTextEdit {
+                background-color: #222;
+                color: #DDD;
+                font-family: monospace;
+                font-size: 14px;
+                padding: 10px;
+                border: 2px solid #555;
+            }
+        """)
+        self.log_view.append(">> Engine Initialized. Map Cluster Loaded.\n")
+        
+        input_layout = QHBoxLayout()
+        self.input_field = QLineEdit()
+        self.input_field.setPlaceholderText("State your intent (e.g. 'I walk north' or 'I attack')")
+        self.input_field.setStyleSheet("padding: 10px; font-size: 16px; background-color: #333; color: white; border: 1px solid #777;")
+        self.input_field.returnPressed.connect(self._on_action_submitted)
+        
+        self.btn_submit = QPushButton("Execute")
+        self.btn_submit.setStyleSheet("padding: 10px; font-size: 16px; background-color: #555; color: white; font-weight: bold;")
+        self.btn_submit.clicked.connect(self._on_action_submitted)
+        
+        input_layout.addWidget(self.input_field)
+        input_layout.addWidget(self.btn_submit)
+        
+        left_layout.addWidget(self.title)
+        left_layout.addWidget(self.battle_map)
+        left_layout.addWidget(self.log_view)
+        left_layout.addLayout(input_layout)
+        
+        # Right Panel (HUD)
+        self.hud = CharacterHUD()
+        
+        main_layout.addLayout(left_layout, stretch=4)
+        main_layout.addWidget(self.hud, stretch=1)
+        self.setLayout(main_layout)
+        
+        self.bus.subscribe("NARRATIVE_OUTPUT", self._on_narrative)
+        self.bus.subscribe("SYSTEM_LOG", self._on_log)
+        self.bus.subscribe("MAP_RENDER", self._on_map_render)
+        self.bus.subscribe("HUD_UPDATE", self._on_hud_update)
+        
+    def _on_map_render(self, payload):
+        battlemap_data = payload.get("battlemap")
+        px = payload.get("px", 50)
+        py = payload.get("py", 50)
+        cx = payload.get("cx", 0)
+        cy = payload.get("cy", 0)
+        self.title.setText(f"S.A.G.A. Engine VTT [Cluster {cx},{cy}] [Local {px},{py}]")
+        self.battle_map.load_matrix(battlemap_data, px, py)
+        
+    def _on_hud_update(self, payload):
+        self.hud.update_stats(payload)
+        
+    def _on_action_submitted(self):
+        intent = self.input_field.text().strip()
+        if not intent: return
+        self.log_view.append(f"\n[PLAYER] {intent}")
+        self.input_field.clear()
+        self.bus.publish("PLAYER_ACTION", {"intent": intent})
+        
+    def _on_narrative(self, payload):
+        text = payload.get('response', '')
+        self.log_view.append(f"\n[AI TRANSLATOR LOG]\n{text}\n")
+        self.log_view.verticalScrollBar().setValue(self.log_view.verticalScrollBar().maximum())
+        
+    def _on_log(self, text):
+        self.log_view.append(f"[SYS] {text}")
+        self.log_view.verticalScrollBar().setValue(self.log_view.verticalScrollBar().maximum())
+
+class StartMenu(QWidget):
+    def __init__(self, bus):
+        super().__init__()
+        self.bus = bus
+        layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        title = QLabel("S.A.G.A. ENGINE V1")
+        title.setStyleSheet("font-size: 36px; font-weight: bold; color: #44FF44; margin-bottom: 30px;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        btn_new = QPushButton("New Game (Create Party)")
+        btn_new.setStyleSheet("padding: 15px; font-size: 18px; background-color: #333; color: white; width: 300px;")
+        btn_new.clicked.connect(lambda: self.bus.publish("UI_START_NEW_GAME"))
+        
+        btn_load = QPushButton("Load Saved Game")
+        btn_load.setStyleSheet("padding: 15px; font-size: 18px; background-color: #333; color: white; width: 300px; margin-top: 10px;")
+        btn_load.clicked.connect(lambda: self.bus.publish("UI_LOAD_GAME"))
+        
+        layout.addWidget(title)
+        layout.addWidget(btn_new)
+        layout.addWidget(btn_load)
+        
+        self.setLayout(layout)
+
+class CharacterCreationScreen(QWidget):
+    def __init__(self, bus):
+        super().__init__()
+        self.bus = bus
+        self.setStyleSheet("background-color: #222; color: white;")
+        layout = QVBoxLayout()
+        
+        title = QLabel("Initialize Biological Chassis")
+        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #44FF44;")
+        layout.addWidget(title)
+        
+        form_layout = QFormLayout()
+        
+        self.name_input = QLineEdit()
+        self.origin_input = QComboBox()
+        self.origin_input.addItems(["Human-Standard", "Mammal-Predator-Wolf", "Synthetic-Scrap", "Fey-Wildkin"])
+        
+        form_layout.addRow("Chassis Designation (Name):", self.name_input)
+        form_layout.addRow("Biological Origin:", self.origin_input)
+        
+        self.spinboxes = {}
+        stats = ["Might", "Reflexes", "Finesse", "Endurance", "Fortitude", "Vitality", 
+                 "Knowledge", "Awareness", "Intuition", "Willpower", "Logic", "Charm"]
+                 
+        for stat in stats:
+            sb = QSpinBox()
+            sb.setRange(1, 8) # Biological ceiling
+            sb.setValue(5)
+            self.spinboxes[stat.lower()] = sb
+            form_layout.addRow(f"{stat}:", sb)
+            
+        layout.addLayout(form_layout)
+        
+        btn_finalize = QPushButton("Finalize Party & Enter Drift")
+        btn_finalize.setStyleSheet("padding: 10px; background-color: #550000; color: white; font-weight: bold; font-size: 16px;")
+        btn_finalize.clicked.connect(self._on_finalize)
+        layout.addWidget(btn_finalize)
+        
+        self.setLayout(layout)
+        
+    def _on_finalize(self):
+        name = self.name_input.text().strip() or "Unnamed Chassis"
+        origin = self.origin_input.currentText()
+        stats = {k: v.value() for k, v in self.spinboxes.items()}
+        
+        payload = {
+            "name": name,
+            "origin": origin,
+            "stats": stats
+        }
+        self.bus.publish("UI_FINALIZE_PARTY", payload)
+
+class SagaDesktopApp(QMainWindow):
+    def __init__(self, bus):
+        super().__init__()
+        self.bus = bus
+        self.setWindowTitle("S.A.G.A. Engine")
+        self.setGeometry(100, 100, 1100, 768)
+        self.setStyleSheet("background-color: #111; color: white;")
+        
+        self.stack = QStackedWidget()
+        
+        self.start_menu = StartMenu(bus)
+        self.char_creation = CharacterCreationScreen(bus)
+        self.map_canvas = MapCanvas(bus)
+        
+        self.stack.addWidget(self.start_menu)      # 0
+        self.stack.addWidget(self.char_creation)   # 1
+        self.stack.addWidget(self.map_canvas)      # 2
+        
+        self.setCentralWidget(self.stack)
+        
+        self.bus.subscribe("UI_START_NEW_GAME", lambda p: self.stack.setCurrentIndex(1))
+        self.bus.subscribe("UI_LOAD_GAME", self._show_game)
+        self.bus.subscribe("UI_FINALIZE_PARTY", self._show_game)
+        
+    def _show_game(self, payload=None):
+        self.stack.setCurrentIndex(2)

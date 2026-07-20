@@ -1,7 +1,256 @@
-body { background: #0a0a0a; color: #c0c0c0; font-family: 'Courier New', monospace; }
-#hud { padding: 10px; border-bottom: 1px solid #333; background: #111; }
-#app { display: flex; gap: 20px; padding: 20px; }
-#battleMap { background: #1a1a1a; border: 2px solid #444; }
-#terminal { flex: 1; display: flex; flex-direction: column; }
-#narrativeOutput { height: 400px; overflow-y: auto; background: #000; padding: 10px; border: 1px solid #333; margin-bottom: 10px; }
-#playerInput { background: #111; color: #0f0; border: 1px solid #444; padding: 10px; }
+:root {
+    --bg-dark: #050505;
+    --bg-panel: rgba(15, 15, 18, 0.85);
+    --border-color: #33333b;
+    --accent-glow: #0ff;
+    --text-primary: #e0e0e0;
+    --text-secondary: #888;
+    
+    --health-color: #ff3333;
+    --stamina-color: #33cc33;
+    --focus-color: #3399ff;
+
+    --font-heading: 'Cinzel', serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'Courier New', Courier, monospace;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    background-image: radial-gradient(circle at 50% 50%, #111 0%, #000 100%);
+}
+
+.view-container {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 0;
+    left: 0;
+    transition: opacity 0.5s ease;
+}
+
+/* --- Typography & Common --- */
+h1, h2, h3 { font-family: var(--font-heading); font-weight: 700; text-transform: uppercase; letter-spacing: 2px; }
+
+.glass-panel {
+    background: var(--bg-panel);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+    border-radius: 8px;
+}
+
+.premium-btn {
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 12px 24px;
+    font-family: var(--font-heading);
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-radius: 4px;
+    width: 100%;
+    margin-bottom: 15px;
+    position: relative;
+    overflow: hidden;
+}
+
+.premium-btn:hover {
+    border-color: var(--accent-glow);
+    color: var(--accent-glow);
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.2), inset 0 0 10px rgba(0, 255, 255, 0.1);
+}
+
+.text-btn {
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+.text-btn:hover {
+    color: #fff;
+    box-shadow: none;
+    border: none;
+}
+
+/* --- Main Menu --- */
+#mainMenu { z-index: 10; }
+.menu-content {
+    text-align: center;
+    animation: fadeIn 2s ease-in;
+}
+.game-title {
+    font-size: 5rem;
+    margin: 0;
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+    letter-spacing: 10px;
+}
+.subtitle {
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    margin-bottom: 50px;
+    letter-spacing: 4px;
+}
+.menu-actions { width: 300px; margin: 0 auto; }
+
+/* --- Character Creation --- */
+#characterCreation { z-index: 10; }
+.creation-box {
+    width: 400px;
+    padding: 40px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 10px 50px rgba(0,0,0,0.8);
+}
+.creation-box h2 {
+    text-align: center;
+    margin-bottom: 30px;
+    color: #fff;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 10px;
+}
+.form-group { margin-bottom: 25px; }
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.form-group input, .form-group select {
+    width: 100%;
+    padding: 12px;
+    background: rgba(0,0,0,0.5);
+    border: 1px solid var(--border-color);
+    color: #fff;
+    font-family: var(--font-body);
+    font-size: 1rem;
+    border-radius: 4px;
+    box-sizing: border-box;
+    transition: border-color 0.3s;
+}
+.form-group input:focus, .form-group select:focus {
+    outline: none;
+    border-color: var(--accent-glow);
+}
+
+/* --- Gameplay View --- */
+#gameplayView {
+    flex-direction: column;
+    justify-content: flex-start;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+/* HUD */
+#hud {
+    width: 100%;
+    max-width: 1200px;
+    margin-bottom: 20px;
+    padding: 15px 25px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-sizing: border-box;
+}
+
+.stats-bar { display: flex; gap: 30px; }
+.stat-item { font-family: var(--font-mono); display: flex; align-items: center; gap: 10px; font-size: 1.2rem; }
+.stat-item.health .value { color: var(--health-color); text-shadow: 0 0 5px var(--health-color); }
+.stat-item.stamina .value { color: var(--stamina-color); text-shadow: 0 0 5px var(--stamina-color); }
+.stat-item.focus .value { color: var(--focus-color); text-shadow: 0 0 5px var(--focus-color); }
+.label { color: var(--text-secondary); font-size: 0.8rem; }
+
+.character-details { display: flex; gap: 40px; font-size: 0.85rem; color: var(--text-secondary); }
+.character-details ul { margin: 5px 0 0 0; padding-left: 15px; color: var(--text-primary); }
+
+/* App layout */
+#app {
+    display: flex;
+    gap: 20px;
+    width: 100%;
+    max-width: 1200px;
+    flex: 1;
+    min-height: 0;
+}
+
+.map-container {
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #08080a;
+}
+#battleMap {
+    background: #000;
+    border: 1px solid #222;
+    box-shadow: 0 0 20px rgba(0,0,0,0.8);
+}
+
+#terminal {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    overflow: hidden;
+}
+
+#narrativeOutput {
+    flex: 1;
+    overflow-y: auto;
+    font-family: var(--font-mono);
+    line-height: 1.6;
+    margin-bottom: 15px;
+    padding-right: 10px;
+    color: #ccc;
+}
+#narrativeOutput p { margin: 0 0 10px 0; animation: fadeUp 0.3s ease-out; }
+.system-msg { color: #555; font-style: italic; }
+
+.input-area {
+    display: flex;
+    align-items: center;
+    border-top: 1px solid var(--border-color);
+    padding-top: 15px;
+}
+.prompt-arrow {
+    color: var(--accent-glow);
+    font-family: var(--font-mono);
+    margin-right: 10px;
+    font-weight: bold;
+}
+#playerInput {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-family: var(--font-mono);
+    font-size: 1rem;
+    outline: none;
+}
+
+/* Animations */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #555; }

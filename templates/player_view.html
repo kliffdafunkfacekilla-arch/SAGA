@@ -1,24 +1,89 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Warden's Journal</title>
+    <meta charset="UTF-8">
+    <title>SAGA - Warden's Journal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <div id="hud">
-        HP: <span id="hp">20</span> | Stamina: <span id="stamina">10</span> | Focus: <span id="focus">10</span>
-        <div style="display:flex; gap: 20px; font-size: 0.9em; margin-top: 5px;">
-            <div><strong>Inventory:</strong><ul id="inventoryList" style="margin:0; padding-left:20px;"></ul></div>
-            <div><strong>Skills:</strong><ul id="skillsList" style="margin:0; padding-left:20px;"></ul></div>
+    <!-- Main Menu View -->
+    <div id="mainMenu" class="view-container">
+        <div class="menu-content">
+            <h1 class="game-title">SAGA</h1>
+            <p class="subtitle">The Omnis Engine</p>
+            <div class="menu-actions">
+                <button id="btnNewGame" class="premium-btn">New Game</button>
+                <button id="btnContinue" class="premium-btn">Continue</button>
+            </div>
         </div>
     </div>
-    <div id="app">
-        <canvas id="battleMap" width="500" height="500"></canvas>
-        <div id="terminal">
-            <div id="narrativeOutput"></div>
-            <input type="text" id="playerInput" placeholder="What is your intent?">
+
+    <!-- Character Creation View -->
+    <div id="characterCreation" class="view-container" style="display: none;">
+        <div class="creation-box">
+            <h2>Forge Your Legend</h2>
+            <div class="form-group">
+                <label for="charName">Name</label>
+                <input type="text" id="charName" placeholder="Enter character name...">
+            </div>
+            <div class="form-group">
+                <label for="charOrigin">Origin</label>
+                <select id="charOrigin">
+                    <option value="Core-born">Core-born</option>
+                    <option value="Wastelander">Wastelander</option>
+                    <option value="Shadow-marked">Shadow-marked</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="charClass">Class</label>
+                <select id="charClass">
+                    <option value="Wanderer">Wanderer</option>
+                    <option value="Spellblade">Spellblade</option>
+                    <option value="Cult Hunter">Cult Hunter</option>
+                </select>
+            </div>
+            <button id="btnCreateCharacter" class="premium-btn">Manifest</button>
+            <button id="btnBackToMenu" class="premium-btn text-btn">Back</button>
         </div>
     </div>
+
+    <!-- Gameplay View -->
+    <div id="gameplayView" class="view-container" style="display: none;">
+        <div id="hud" class="glass-panel">
+            <div class="stats-bar">
+                <div class="stat-item health"><span class="label">HP</span> <span id="hp" class="value">20</span></div>
+                <div class="stat-item stamina"><span class="label">STAM</span> <span id="stamina" class="value">10</span></div>
+                <div class="stat-item focus"><span class="label">FOC</span> <span id="focus" class="value">10</span></div>
+            </div>
+            <div class="character-details">
+                <div class="detail-col">
+                    <strong>Inventory:</strong>
+                    <ul id="inventoryList"></ul>
+                </div>
+                <div class="detail-col">
+                    <strong>Skills:</strong>
+                    <ul id="skillsList"></ul>
+                </div>
+            </div>
+        </div>
+        
+        <div id="app">
+            <div class="map-container glass-panel">
+                <canvas id="battleMap" width="500" height="500"></canvas>
+            </div>
+            <div id="terminal" class="glass-panel">
+                <div id="narrativeOutput">
+                    <p class="system-msg">System initialized. Awaiting input...</p>
+                </div>
+                <div class="input-area">
+                    <span class="prompt-arrow">></span>
+                    <input type="text" id="playerInput" placeholder="What is your intent?" autocomplete="off">
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="/static/battlemap.js"></script>
     <script src="/static/terminal.js"></script>
 </body>

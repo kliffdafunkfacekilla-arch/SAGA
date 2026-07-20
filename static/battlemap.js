@@ -61,6 +61,8 @@ async function refreshCharData(player_id = 1) {
 }
 
 document.addEventListener("DOMContentLoaded", function() {
-    renderBattlemap('Burg', 1, 13);
-    refreshCharData(1);
+    // Show main menu on load
+    if (typeof showView === 'function') {
+        showView('mainMenu');
+    }
 });
