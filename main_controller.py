@@ -90,16 +90,20 @@ class SagaController:
 
     def _update_hud(self):
         """Pushes current player stats to the new Character HUD"""
-        self.bus.publish("HUD_UPDATE", {
-            "name": self.player.name,
-            "hp": self.player.current_hp,
-            "max_hp": self.player.max_hp,
-            "stamina": self.player.active_stamina,
-            "max_stamina": self.player.max_stamina,
-            "focus": self.player.active_focus,
-            "max_focus": self.player.max_focus,
-            "trauma": self.player.trauma_tokens
-        })
+        if self.player:
+            self.bus.publish("HUD_UPDATE", {
+                "name": self.player.name,
+                "hp": self.player.current_hp,
+                "max_hp": self.player.max_hp,
+                "stamina": self.player.active_stamina,
+                "max_stamina": self.player.max_stamina,
+                "focus": self.player.active_focus,
+                "max_focus": self.player.max_focus,
+                "trauma": self.player.trauma_tokens
+            })
+        else:
+            # No player initialized yet; skip HUD update to avoid None errors
+            self.bus.publish("SYSTEM_LOG", "HUD_UPDATE skipped: no player initialized.")
 
     def _wire_events(self):
         self.bus.subscribe("PLAYER_ACTION", self.handle_player_action)
