@@ -10,8 +10,7 @@ from rules_engine.clash_calculator import ClashCalculator
 from rules_engine.character_sheet import CharacterSheet
 from rules_engine.inventory import Item
 from world_manager.npc_ai import NPCAI
-from ai_dm.director import AIDirector
-from lore_db.knowledge_graph import KnowledgeGraphDB
+
 from story_manager.quest_weaver import QuestWeaver
 
 class SagaMessageBus:
@@ -32,10 +31,8 @@ class SagaController:
         self.app = QApplication(sys.argv)
         
         self.world = WorldSimulator()
-        self.lore = KnowledgeGraphDB()
         self.rules = ClashCalculator()
         self.story = QuestWeaver()
-        self.ai = AIDirector()
         self.npc_ai = NPCAI()
         
         self.map_engine = ClusterManager()
@@ -74,7 +71,7 @@ class SagaController:
             
             # Register physically spawned entities with the Rules Engine
             for ent in self.current_battlemap.get("entities", []):
-                if ent["name"] not in self.rules.registry:
+                if ent["name"] not in self.rules.entities:
                     stats = {"might": 5, "reflexes": 5, "endurance": 5}
                     if "Bandit" in ent["name"]: stats = {"might": 4, "reflexes": 6, "endurance": 4}
                     elif "Guard" in ent["name"]: stats = {"might": 7, "reflexes": 4, "endurance": 7}
@@ -154,6 +151,9 @@ class SagaController:
             self.player_py = 0; self.player_cy += 1; self.current_battlemap = None
             
         if moved:
+            if not self.current_battlemap:
+                self._update_map_render()
+                
             # Tick the NPC AI every time the player moves
             entities = self.current_battlemap.get("entities", [])
             grid = self.current_battlemap.get("grid", [])
@@ -199,7 +199,7 @@ class SagaController:
              explicit_hook_directive = f"\nSYSTEM DIRECTIVE: Narrate the following objective: '{self.current_hook['objective']}'"
         
         # If target isn't explicitly defined by intent parser, try to match a local entity
-        if target not in self.rules.registry:
+        if target not in self.rules.entities:
             target = "Unknown Entity"
             
         mechanical_result = self.rules.resolve_action(intent_raw, "Player", target)
@@ -213,7 +213,7 @@ class SagaController:
         import os
         os.makedirs("saves", exist_ok=True)
         
-        entities_data = {name: sheet.to_dict() for name, sheet in self.rules.registry.items()}
+        entities_data = {name: sheet.to_dict() for name, sheet in self.rules.entities.items()}
         
         state = {
             "player_coords": {
@@ -245,7 +245,7 @@ class SagaController:
         self.player_px = coords.get("px", 50)
         self.player_py = coords.get("py", 50)
         
-        self.rules.registry.clear()
+        self.rules.entities.clear()
         for name, sheet_data in state.get("rules_registry", {}).items():
             sheet = CharacterSheet.from_dict(sheet_data)
             self.rules.register_entity(sheet)

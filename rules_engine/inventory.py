@@ -61,6 +61,14 @@ class Inventory:
             if item:
                 tax += item.loadout_cost
         return abs(tax)
+
+    def get_total_modifier(self, stat_name: str) -> int:
+        """Returns the total stat modifier provided by all equipped gear."""
+        mod = 0
+        for slot, item in self.slots.items():
+            if item and item.stat_type == stat_name.lower():
+                mod += item.modifier
+        return mod
         
     def get_equipped_item_modifier(self, stat_type: str) -> int:
         """Returns the total modifier bonus for a specific stat from all equipped items."""
