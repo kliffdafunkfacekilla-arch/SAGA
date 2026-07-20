@@ -34,6 +34,10 @@ class CharacterSheet:
         self.is_stabilized = True
         self.has_disadvantage = False
         
+        # Functional State
+        self.tags = set()
+        self.modifiers = {}
+        
         self._derive_pools()
         self._init_battery()
         

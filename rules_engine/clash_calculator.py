@@ -15,7 +15,11 @@ class ClashCalculator:
     def resolve_action(self, intent: str, actor_name: str, target_name: str) -> dict:
         """
         Calculates damage and applies the strict BRUTAL Engine Trauma Pipeline.
+        Also parses functional skills and applies them via the Effects Engine.
         """
+        from rules_engine.skills_data import PASSIVE_HARDWARE, SUBCONSCIOUS_MAGIC, ANOMALIES
+        from rules_engine.effects import execute_effects
+        
         actor = self.entities.get(actor_name)
         target = self.entities.get(target_name)
         
@@ -31,6 +35,34 @@ class ClashCalculator:
                 "narrative_hint": f"[CRITICAL FAILURE] {actor.name} is bleeding out and requires Stabilization to act!"
             }
             
+        # Search for skill in intent
+        matched_skill = None
+        for category in [PASSIVE_HARDWARE.values(), SUBCONSCIOUS_MAGIC.values(), ANOMALIES.values()]:
+            for group in category:
+                if type(group) == dict:
+                    for tier, skill in group.items():
+                        if type(skill) == dict and skill.get("name", "").lower() in intent.lower():
+                            matched_skill = skill
+                            break
+                if matched_skill: break
+            if matched_skill: break
+            
+        if matched_skill:
+            # Execute Functional Skill
+            cost = matched_skill.get("cost", {})
+            if cost:
+                actor.apply_action_cost(cost)
+            
+            logs = execute_effects(actor, target, matched_skill, self)
+            
+            return {
+                "action": intent,
+                "success": True,
+                "is_clash": False,
+                "damage": 0, # Simplified, actual damage done in effects
+                "narrative_hint": " | ".join(logs)
+            }
+            
         # Check Disadvantage State (Adrenaline Shock)
         disadvantage = False
         if hasattr(actor, "has_disadvantage") and actor.has_disadvantage:
@@ -38,8 +70,8 @@ class ClashCalculator:
             actor.has_disadvantage = False # Clears after one roll
             
         # Check Narrative Tags (Brutal vs Brittle)
-        # For MVP, we check intent string for keywords, but normally we check item/environment tags
-        if "brutal" in intent.lower() and "brittle" in intent.lower():
+        # Check intent string for keywords OR actual tags on the actor/target
+        if ("brutal" in intent.lower() or "brutal" in actor.tags) and "brittle" in target.tags:
             return {
                 "action": intent,
                 "success": True,
@@ -66,6 +98,8 @@ class ClashCalculator:
             actor.apply_action_cost({"stamina": 1})
             actor_roll = base_roll + actor.get_stat("might")
             target_defense = 10 + target.get_stat("reflexes")
+            if "prone" in target.tags: target_defense -= 2
+            if "exposed" in target.tags: target_defense -= 4
         
         is_clash = (actor_roll == target_defense) and not is_skill
         success = actor_roll > target_defense

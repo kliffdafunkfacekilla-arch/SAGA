@@ -21,6 +21,8 @@ class SagaMessageBus:
             self.subscribers[event_type] = []
         self.subscribers[event_type].append(callback)
     def publish(self, event_type, payload=None):
+        # Debug: print every event payload for schema validation
+        print(f"EVENT DISPATCHED - Type: {event_type}, Payload: {payload}")
         if event_type in self.subscribers:
             for callback in self.subscribers[event_type]:
                 callback(payload)

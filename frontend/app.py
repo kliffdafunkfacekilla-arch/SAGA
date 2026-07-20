@@ -4,11 +4,14 @@ from PyQt6.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QWidget,
                              QSpinBox, QComboBox, QFormLayout)
 from PyQt6.QtCore import Qt, QRectF
 from PyQt6.QtGui import QBrush, QColor, QPen, QPixmap
+from frontend.char_creation import CharacterCreationScreen
+
+from frontend.sprite_manager import SpriteManager
 
 class BattleMapCanvas(QGraphicsView):
     """
-    Renders the 100x100 local battle map dynamically.
-    Uses generic rendering right now, will map to sprites if available.
+    Renders the local battle map dynamically.
+    Uses SpriteManager to map graphical assets to the tactical grid.
     """
     def __init__(self):
         super().__init__()
@@ -16,14 +19,12 @@ class BattleMapCanvas(QGraphicsView):
         self.setScene(self.scene)
         self.setMinimumHeight(350)
         self.setBackgroundBrush(QBrush(QColor("#0a0a0a")))
-        self.tile_size = 15
+        
+        self.tile_size = 40
         self.player_x = 50
         self.player_y = 50
         
-        # Load Legacy Assets
-        self.char_pixmap = QPixmap("assets/gui/Fantasy Minimal Pixel Art GUI by eta-commercial-free/UI/CharacterBox_56x57.png")
-        if not self.char_pixmap.isNull():
-            self.char_pixmap = self.char_pixmap.scaled(self.tile_size, self.tile_size, Qt.AspectRatioMode.KeepAspectRatio)
+        self.sprite_manager = SpriteManager(self.tile_size)
         
     def load_matrix(self, battlemap_data: dict, px: int, py: int):
         self.scene.clear()
@@ -34,38 +35,32 @@ class BattleMapCanvas(QGraphicsView):
         width = battlemap_data["width"]
         height = battlemap_data["height"]
         
-        color_empty = QColor("#1a1a1a")
-        color_obstacle = QColor("#2b4a2b") 
-        color_water = QColor("#1a2a5a")
-        color_poi = QColor("#8a1a1a")
-        color_road = QColor("#555544")
-        color_npc = QColor("#4444FF")
-        color_enemy = QColor("#FF4444")
-        pen = QPen(QColor("#222"))
+        # Viewport logic
+        vx_start = max(0, self.player_x - 10)
+        vy_start = max(0, self.player_y - 10)
+        vx_end = min(width, self.player_x + 10)
+        vy_end = min(height, self.player_y + 10)
         
-        vx_start = max(0, self.player_x - 15)
-        vx_end = min(width, self.player_x + 15)
-        vy_start = max(0, self.player_y - 15)
-        vy_end = min(height, self.player_y + 15)
-        
+        # Draw Map
         for y in range(vy_start, vy_end):
             for x in range(vx_start, vx_end):
                 tile_val = grid[y][x]
-                brush = QBrush(color_empty)
-                if tile_val == 1: brush = QBrush(color_obstacle)
-                elif tile_val == 2: brush = QBrush(color_water)
-                elif tile_val == 3: brush = QBrush(color_poi)
-                elif tile_val == 4: brush = QBrush(color_road)
-                
                 draw_x = (x - vx_start) * self.tile_size
                 draw_y = (y - vy_start) * self.tile_size
-                self.scene.addRect(draw_x, draw_y, self.tile_size, self.tile_size, pen, brush)
                 
+                # Fetch Terrain Sprite
+                if tile_val == 1: sprite_name = "wall"
+                elif tile_val == 2: sprite_name = "water"
+                elif tile_val == 3: sprite_name = "road"
+                else: sprite_name = "grass"
+                
+                pm = self.sprite_manager.get_sprite(sprite_name)
+                self.scene.addPixmap(pm).setPos(draw_x, draw_y)
+                
+                # Draw Player
                 if x == self.player_x and y == self.player_y:
-                    if not self.char_pixmap.isNull():
-                        self.scene.addPixmap(self.char_pixmap).setPos(draw_x, draw_y)
-                    else:
-                        self.scene.addEllipse(draw_x+2, draw_y+2, self.tile_size-4, self.tile_size-4, QPen(Qt.GlobalColor.white), QBrush(Qt.GlobalColor.green))
+                    player_sprite = self.sprite_manager.get_sprite("player")
+                    self.scene.addPixmap(player_sprite).setPos(draw_x, draw_y)
 
         # Draw Entities
         entities = battlemap_data.get("entities", [])
@@ -76,8 +71,9 @@ class BattleMapCanvas(QGraphicsView):
                 draw_x = (ex - vx_start) * self.tile_size
                 draw_y = (ey - vy_start) * self.tile_size
                 
-                ent_color = color_enemy if ent.get("type") == "Enemy" else color_npc
-                self.scene.addEllipse(draw_x+2, draw_y+2, self.tile_size-4, self.tile_size-4, QPen(Qt.GlobalColor.white), QBrush(ent_color))
+                sprite_name = ent.get("sprite", "enemy")
+                pm = self.sprite_manager.get_sprite(sprite_name)
+                self.scene.addPixmap(pm).setPos(draw_x, draw_y)
 
 class CharacterHUD(QFrame):
     """
@@ -253,57 +249,7 @@ class StartMenu(QWidget):
         
         self.setLayout(layout)
 
-class CharacterCreationScreen(QWidget):
-    def __init__(self, bus):
-        super().__init__()
-        self.bus = bus
-        self.setStyleSheet("background-color: #222; color: white;")
-        layout = QVBoxLayout()
-        
-        title = QLabel("Initialize Biological Chassis")
-        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #44FF44;")
-        layout.addWidget(title)
-        
-        form_layout = QFormLayout()
-        
-        self.name_input = QLineEdit()
-        self.origin_input = QComboBox()
-        self.origin_input.addItems(["Human-Standard", "Mammal-Predator-Wolf", "Synthetic-Scrap", "Fey-Wildkin"])
-        
-        form_layout.addRow("Chassis Designation (Name):", self.name_input)
-        form_layout.addRow("Biological Origin:", self.origin_input)
-        
-        self.spinboxes = {}
-        stats = ["Might", "Reflexes", "Finesse", "Endurance", "Fortitude", "Vitality", 
-                 "Knowledge", "Awareness", "Intuition", "Willpower", "Logic", "Charm"]
-                 
-        for stat in stats:
-            sb = QSpinBox()
-            sb.setRange(1, 8) # Biological ceiling
-            sb.setValue(5)
-            self.spinboxes[stat.lower()] = sb
-            form_layout.addRow(f"{stat}:", sb)
-            
-        layout.addLayout(form_layout)
-        
-        btn_finalize = QPushButton("Finalize Party & Enter Drift")
-        btn_finalize.setStyleSheet("padding: 10px; background-color: #550000; color: white; font-weight: bold; font-size: 16px;")
-        btn_finalize.clicked.connect(self._on_finalize)
-        layout.addWidget(btn_finalize)
-        
-        self.setLayout(layout)
-        
-    def _on_finalize(self):
-        name = self.name_input.text().strip() or "Unnamed Chassis"
-        origin = self.origin_input.currentText()
-        stats = {k: v.value() for k, v in self.spinboxes.items()}
-        
-        payload = {
-            "name": name,
-            "origin": origin,
-            "stats": stats
-        }
-        self.bus.publish("UI_FINALIZE_PARTY", payload)
+
 
 class SagaDesktopApp(QMainWindow):
     def __init__(self, bus):
