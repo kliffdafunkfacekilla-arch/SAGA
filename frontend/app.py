@@ -20,6 +20,11 @@ class BattleMapCanvas(QGraphicsView):
         self.player_x = 50
         self.player_y = 50
         
+        # Load Legacy Assets
+        self.char_pixmap = QPixmap("assets/gui/Fantasy Minimal Pixel Art GUI by eta-commercial-free/UI/CharacterBox_56x57.png")
+        if not self.char_pixmap.isNull():
+            self.char_pixmap = self.char_pixmap.scaled(self.tile_size, self.tile_size, Qt.AspectRatioMode.KeepAspectRatio)
+        
     def load_matrix(self, battlemap_data: dict, px: int, py: int):
         self.scene.clear()
         self.player_x = px
@@ -57,7 +62,10 @@ class BattleMapCanvas(QGraphicsView):
                 self.scene.addRect(draw_x, draw_y, self.tile_size, self.tile_size, pen, brush)
                 
                 if x == self.player_x and y == self.player_y:
-                    self.scene.addEllipse(draw_x+2, draw_y+2, self.tile_size-4, self.tile_size-4, QPen(Qt.GlobalColor.white), QBrush(Qt.GlobalColor.green))
+                    if not self.char_pixmap.isNull():
+                        self.scene.addPixmap(self.char_pixmap).setPos(draw_x, draw_y)
+                    else:
+                        self.scene.addEllipse(draw_x+2, draw_y+2, self.tile_size-4, self.tile_size-4, QPen(Qt.GlobalColor.white), QBrush(Qt.GlobalColor.green))
 
         # Draw Entities
         entities = battlemap_data.get("entities", [])
@@ -89,12 +97,30 @@ class CharacterHUD(QFrame):
         self.setFixedWidth(250)
         
         layout = QVBoxLayout()
+        
+        # UI Polish: Asset injection
+        self.portrait_label = QLabel()
+        portrait_pixmap = QPixmap("assets/gui/Fantasy Minimal Pixel Art GUI by eta-commercial-free/UI/CharacterBox_56x57.png")
+        if not portrait_pixmap.isNull():
+            self.portrait_label.setPixmap(portrait_pixmap)
+            self.portrait_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.portrait_label)
+        
         self.name_label = QLabel("Player Name")
         self.name_label.setStyleSheet("font-size: 18px; color: #44FF44; margin-bottom: 10px;")
         
+        # Use HealthBarPanel background if possible
+        bar_bg = QPixmap("assets/gui/Fantasy Minimal Pixel Art GUI by eta-commercial-free/UI/HealthBarPanel_160x41.png")
+        
         self.hp_label = QLabel("HP: --/--")
+        if not bar_bg.isNull():
+            self.hp_label.setStyleSheet("color: #FF5555; background-image: url('assets/gui/Fantasy Minimal Pixel Art GUI by eta-commercial-free/UI/HealthBarPanel_160x41.png'); padding: 5px;")
+        
         self.stamina_label = QLabel("Stamina: --/--")
         self.focus_label = QLabel("Focus: --/--")
+        if not bar_bg.isNull():
+            self.focus_label.setStyleSheet("color: #5555FF; background-image: url('assets/gui/Fantasy Minimal Pixel Art GUI by eta-commercial-free/UI/HealthBarPanel_160x41.png'); padding: 5px;")
+            
         self.trauma_label = QLabel("Trauma Tokens: 0")
         
         layout.addWidget(self.name_label)
