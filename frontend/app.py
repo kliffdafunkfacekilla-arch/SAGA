@@ -20,7 +20,7 @@ class BattleMapCanvas(QGraphicsView):
         self.setMinimumHeight(350)
         self.setBackgroundBrush(QBrush(QColor("#0a0a0a")))
         
-        self.tile_size = 40
+        self.tile_size = 32
         self.player_x = 50
         self.player_y = 50
         
@@ -49,10 +49,26 @@ class BattleMapCanvas(QGraphicsView):
                 draw_y = (y - vy_start) * self.tile_size
                 
                 # Fetch Terrain Sprite
-                if tile_val == 1: sprite_name = "wall"
-                elif tile_val == 2: sprite_name = "water"
-                elif tile_val == 3: sprite_name = "road"
-                else: sprite_name = "grass"
+                biome = battlemap_data.get("biome", "grass").lower()
+                
+                if tile_val == 1: 
+                    # Obstacles (Trees/Rocks)
+                    if biome in ["forest", "jungle", "taiga"]:
+                        sprite_name = "forest"
+                    elif biome in ["mountains", "hills", "volcanic"]:
+                        sprite_name = "mountains"
+                    else:
+                        sprite_name = "wall"
+                elif tile_val == 2: 
+                    sprite_name = "water"
+                elif tile_val == 3: 
+                    # Buildings / POI
+                    sprite_name = "village" if biome == "town" else "ruins"
+                elif tile_val == 4: 
+                    sprite_name = "road"
+                else: 
+                    # Base Ground (Empty) -> use the biome's tile directly!
+                    sprite_name = biome
                 
                 pm = self.sprite_manager.get_sprite(sprite_name)
                 self.scene.addPixmap(pm).setPos(draw_x, draw_y)

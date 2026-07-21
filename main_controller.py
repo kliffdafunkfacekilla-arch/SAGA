@@ -1,8 +1,17 @@
 import sys
 import json
+
+# ==============================================================================
+# CRITICAL WINDOWS FIX: 
+# llama_cpp must be initialized BEFORE PyQt6 is imported, otherwise it causes
+# a memory access violation (0x00000000) during backend initialization.
+# ==============================================================================
+from ai_dm.director import AIDirector
+print("Pre-initializing AI Director to prevent PyQt6 conflict...")
+GLOBAL_AI = AIDirector()
+
 from PyQt6.QtWidgets import QApplication
 from frontend.app import SagaDesktopApp
-
 # Clean Modules
 from world_manager.simulation import WorldSimulator
 from world_manager.map_generator import ClusterManager
@@ -11,6 +20,23 @@ from rules_engine.character_sheet import CharacterSheet
 from rules_engine.inventory import Item
 from world_manager.npc_ai import NPCAI
 
+class SimpleAI:
+    """Placeholder AI class providing minimal intent parsing and prompt generation.
+    This avoids external dependencies while keeping the engine functional.
+    """
+    def parse_intent(self, intent_raw: str) -> dict:
+        # Very naive intent parsing: split by spaces and treat first word as target.
+        parts = intent_raw.split()
+        target = parts[0] if parts else ""
+        return {"target": target}
+
+    def generate_llm_prompt(self, mechanical_result: str, context: str) -> str:
+        # Combine mechanical result and lore/context into a simple narrative response.
+        return f"Mechanics: {mechanical_result}\nContext:{context}"
+class SimpleLore:
+    """Placeholder lore system providing minimal context retrieval."""
+    def get_context_for_location(self, target: str) -> str:
+        return f"No lore available for {target}."
 from story_manager.quest_weaver import QuestWeaver
 
 class SagaMessageBus:
@@ -30,12 +56,18 @@ class SagaMessageBus:
 class SagaController:
     def __init__(self):
         self.bus = SagaMessageBus()
+        
+        # Use the globally pre-initialized AI Director
+        self.ai = GLOBAL_AI
+        
+        # Now it's safe to initialize the GUI application
         self.app = QApplication(sys.argv)
         
         self.world = WorldSimulator()
         self.rules = ClashCalculator()
         self.story = QuestWeaver()
         self.npc_ai = NPCAI()
+        self.lore = SimpleLore()
         
         self.map_engine = ClusterManager()
         
@@ -204,11 +236,25 @@ class SagaController:
         if "search" in intent_raw or "investigate" in intent_raw:
              explicit_hook_directive = f"\nSYSTEM DIRECTIVE: Narrate the following objective: '{self.current_hook['objective']}'"
         
-        # If target isn't explicitly defined by intent parser, try to match a local entity
-        if target not in self.rules.entities:
-            target = "Unknown Entity"
+        # Override naive parsing by looking for actual entities in intent
+        matched_target = None
+        for ent in entities:
+            if ent["name"].lower() in intent_raw.lower():
+                matched_target = ent["name"]
+                break
+                
+        if matched_target:
+            target = matched_target
             
-        mechanical_result = self.rules.resolve_action(intent_raw, "Player", target)
+        # If the target is NOT an entity, treat it as an environment/observation action
+        if target not in self.rules.entities:
+            biome = self.current_battlemap.get('biome', 'Unknown Terrain')
+            weather = self.current_battlemap.get('weather', 'Clear')
+            visible_names = [e['name'] for e in entities]
+            env_desc = f"You are in a {biome}. Weather is {weather}. Visible entities: {', '.join(visible_names) if visible_names else 'None'}."
+            mechanical_result = {"action": intent_raw, "success": True, "narrative_hint": f"The player interacts with or observes their surroundings. Environment: {env_desc}"}
+        else:
+            mechanical_result = self.rules.resolve_action(intent_raw, "Player", target)
         
         self._update_hud()
         

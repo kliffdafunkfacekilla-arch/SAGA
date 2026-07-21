@@ -3,6 +3,8 @@ from PyQt6.QtCore import Qt
 import os
 import glob
 
+import json
+
 class SpriteManager:
     """
     Central repository for caching, scaling, and managing 2D sprite graphics.
@@ -10,13 +12,49 @@ class SpriteManager:
     def __init__(self, tile_size=40):
         self.tile_size = tile_size
         self.cache = {}
-        self.assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "sprites")
+        self.base_assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
+        self.mapping_file = os.path.join(self.base_assets_dir, "tile_mapping.json")
+        self.custom_mapping = self._load_mapping()
         
         # Ensure directory exists
-        if not os.path.exists(self.assets_dir):
-            os.makedirs(self.assets_dir, exist_ok=True)
+        if not os.path.exists(self.base_assets_dir):
+            os.makedirs(self.base_assets_dir, exist_ok=True)
             
         self._load_fallback_sprites()
+        self._build_asset_index()
+
+    def _build_asset_index(self):
+        """Recursively scans the assets directory and builds an O(1) lookup index of all pngs."""
+        self.asset_index = {}
+        for root, dirs, files in os.walk(self.base_assets_dir):
+            for file in files:
+                if file.lower().endswith('.png'):
+                    # Store filename without extension as the key
+                    basename = os.path.splitext(file)[0].lower()
+                    # Only map if not already mapped, or maybe override? We'll just map first found.
+                    if basename not in self.asset_index:
+                        self.asset_index[basename] = os.path.join(root, file)
+
+    def _load_mapping(self):
+        if os.path.exists(self.mapping_file):
+            try:
+                with open(self.mapping_file, "r") as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Failed to load tile mapping: {e}")
+        return {}
+
+    def set_mapping(self, terrain_name: str, filepath: str):
+        self.custom_mapping[terrain_name] = filepath
+        try:
+            with open(self.mapping_file, "w") as f:
+                json.dump(self.custom_mapping, f, indent=4)
+        except Exception as e:
+            print(f"Failed to save tile mapping: {e}")
+            
+        # Invalidate cache for this name
+        if terrain_name in self.cache:
+            del self.cache[terrain_name]
         
     def _load_fallback_sprites(self):
         """Creates procedural pixmaps if files are missing."""
@@ -51,18 +89,25 @@ class SpriteManager:
 
     def get_sprite(self, name: str) -> QPixmap:
         """Returns the scaled QPixmap for a given name, checking cache first."""
-        if name in self.cache:
-            return self.cache[name]
+        search_name = name.lower()
+        if search_name in self.cache:
+            return self.cache[search_name]
             
-        # Search the assets directory dynamically (ignores extension)
-        pattern = os.path.join(self.assets_dir, f"{name}.*")
-        matches = glob.glob(pattern)
+        matches = []
         
+        # 1. Check custom JSON mapping first
+        if search_name in self.custom_mapping and os.path.exists(self.custom_mapping[search_name]):
+            matches = [self.custom_mapping[search_name]]
+            
+        # 2. Check the recursive asset index O(1)
+        if not matches and search_name in self.asset_index:
+            matches = [self.asset_index[search_name]]
+
         if matches:
             filepath = matches[0]
             pixmap = QPixmap(filepath)
             if not pixmap.isNull():
-                scaled = pixmap.scaled(self.tile_size, self.tile_size, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+                scaled = pixmap.scaled(self.tile_size, self.tile_size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
                 self.cache[name] = scaled
                 return scaled
                 
