@@ -1,6 +1,5 @@
 import sys
 import json
-import random
 
 # ==============================================================================
 # CRITICAL WINDOWS FIX: 
@@ -20,20 +19,25 @@ from rules_engine.clash_calculator import ClashCalculator
 from rules_engine.character_sheet import CharacterSheet
 from rules_engine.inventory import Item
 from world_manager.npc_ai import NPCAI
-from story_manager.quest_weaver import QuestWeaver, GruntPack
 
 class SimpleAI:
+    """Placeholder AI class providing minimal intent parsing and prompt generation.
+    This avoids external dependencies while keeping the engine functional.
+    """
     def parse_intent(self, intent_raw: str) -> dict:
+        # Very naive intent parsing: split by spaces and treat first word as target.
         parts = intent_raw.split()
         target = parts[0] if parts else ""
         return {"target": target}
 
     def generate_llm_prompt(self, mechanical_result: str, context: str) -> str:
+        # Combine mechanical result and lore/context into a simple narrative response.
         return f"Mechanics: {mechanical_result}\nContext:{context}"
-
 class SimpleLore:
+    """Placeholder lore system providing minimal context retrieval."""
     def get_context_for_location(self, target: str) -> str:
         return f"No lore available for {target}."
+from story_manager.quest_weaver import QuestWeaver
 
 class SagaMessageBus:
     def __init__(self):
@@ -43,6 +47,7 @@ class SagaMessageBus:
             self.subscribers[event_type] = []
         self.subscribers[event_type].append(callback)
     def publish(self, event_type, payload=None):
+        # Debug: print every event payload for schema validation
         print(f"EVENT DISPATCHED - Type: {event_type}, Payload: {payload}")
         if event_type in self.subscribers:
             for callback in self.subscribers[event_type]:
@@ -51,8 +56,11 @@ class SagaMessageBus:
 class SagaController:
     def __init__(self):
         self.bus = SagaMessageBus()
+        
+        # Use the globally pre-initialized AI Director
         self.ai = GLOBAL_AI
         
+        # Now it's safe to initialize the GUI application
         self.app = QApplication(sys.argv)
         
         self.world = WorldSimulator()
@@ -60,134 +68,49 @@ class SagaController:
         self.story = QuestWeaver()
         self.npc_ai = NPCAI()
         self.lore = SimpleLore()
+        
         self.map_engine = ClusterManager()
         
+        self.map_engine = ClusterManager()
+        
+        # We no longer statically initialize the party here. 
+        # It waits for the Character Creation Screen.
         self.party = []
         self.active_party_member_idx = 0
         self.player = None
         
-        self.tension_meter = 0.0
-        self.current_hook = {"objective": "Explore the region and survive."}
-        
         self.ui = SagaDesktopApp(self.bus)
         self._wire_events()
         
+        # Player coordinates
         self.player_cx = 12
         self.player_cy = 12
         self.player_px = 50
         self.player_py = 50
         
     def _init_world(self, payload=None):
-        self.story.initialize_campaign(self.player_cx, self.player_cy)
+        hook = self.story.generate_hook_for_cell(14, 22)
         poi_coords = [[14, 22]]
-        self.map_engine.generate_cluster(region_id=1, base_biome="Forest", poi_coords=poi_coords, poi_context="Starting Zone")
+        
+        self.map_engine.generate_cluster(region_id=1, base_biome="Forest", poi_coords=poi_coords, poi_context=hook['objective'])
+        
+        self.current_hook = hook
         self._update_map_render()
         self._update_hud()
         
-    def _trigger_chaos_event(self):
-        """Triggers a purely random simulation event (wandering monsters, hazards), completely detached from the story."""
-        if not hasattr(self, 'current_battlemap') or self.current_battlemap is None:
-            return
-            
-        if "entities" not in self.current_battlemap:
-            self.current_battlemap["entities"] = []
-            
-        if random.random() > 0.4:
-            # Combat Chaos
-            pack = GruntPack("Wandering Beast", "Predators", random.randint(1, 3), 1).to_dict()
-            for i in range(pack.get("count", 0)):
-                ent_name = f"{pack['name']} {i+1}"
-                ent_x = max(0, min(99, self.player_px + random.randint(-15, 15)))
-                ent_y = max(0, min(99, self.player_py + random.randint(-15, 15)))
-                self.current_battlemap["entities"].append({
-                    "name": ent_name, "x": ent_x, "y": ent_y,
-                    "health": 10 + (pack.get("level", 1) * 2),
-                    "personality": "Hostile", "task": "Hunting"
-                })
-                if ent_name not in self.rules.entities:
-                    self.rules.register_entity(CharacterSheet(ent_name, {"might": 5, "reflexes": 5, "endurance": 5}))
-            narrative_context = f"CHAOS EVENT: A pack of {pack['count']} wandering beasts stumble upon the party!"
-        else:
-            # Neutral Chaos
-            ent_name = "Lost Traveler"
-            ent_x = max(0, min(99, self.player_px + random.randint(-5, 5)))
-            ent_y = max(0, min(99, self.player_py + random.randint(-5, 5)))
-            self.current_battlemap["entities"].append({
-                "name": ent_name, "x": ent_x, "y": ent_y, "health": 10,
-                "personality": "Neutral", "task": "Wandering aimlessly."
-            })
-            if ent_name not in self.rules.entities:
-                self.rules.register_entity(CharacterSheet(ent_name, {"might": 3, "reflexes": 3, "endurance": 3}))
-            narrative_context = f"CHAOS EVENT: The party encounters a {ent_name} wandering the wilderness."
-            
-        prompt_res = self.ai.generate_llm_prompt("A sudden, random event occurs in the world.", narrative_context)
-        self.bus.publish("NARRATIVE_OUTPUT", {"response": prompt_res})
-        
-        self.bus.publish("MAP_RENDER", {
-            "battlemap": self.current_battlemap,
-            "px": self.player_px, "py": self.player_py,
-            "cx": self.player_cx, "cy": self.player_cy
-        })
-
-    def _inject_story_node(self, hook: dict):
-        """Physically spawns the story entities into the map when the player enters the target cell."""
-        self.current_hook = hook
-        if "entities" not in self.current_battlemap:
-            self.current_battlemap["entities"] = []
-            
-        narrative_context = f"STORY NODE REACHED: {self.current_hook['objective']}"
-            
-        pack = self.current_hook.get("grunt_pack")
-        social = self.current_hook.get("social_pack")
-        hazard = self.current_hook.get("hazard_pack")
-        
-        if pack:
-            for i in range(pack.get("count", 0)):
-                ent_name = f"{pack['name']} {i+1}"
-                ent_x = random.randint(30, 70)
-                ent_y = random.randint(30, 70)
-                self.current_battlemap["entities"].append({
-                    "name": ent_name, "x": ent_x, "y": ent_y,
-                    "health": 10 + (pack.get("level", 1) * 2),
-                    "personality": "Hostile", "task": f"Executing objective: {self.current_hook['objective']}"
-                })
-                if ent_name not in self.rules.entities:
-                    self.rules.register_entity(CharacterSheet(ent_name, {"might": 6, "reflexes": 5, "endurance": 5}))
-            narrative_context += f" The party is confronted by {pack['count']} {pack['name']} ({pack['pack_type']})."
-            
-        if social:
-            ent_name = social['name']
-            ent_x = 50; ent_y = 50
-            self.current_battlemap["entities"].append({
-                "name": ent_name, "x": ent_x, "y": ent_y, "health": 10,
-                "personality": social["personality"], "task": "Waiting to be interacted with."
-            })
-            if ent_name not in self.rules.entities:
-                self.rules.register_entity(CharacterSheet(ent_name, {"might": 3, "reflexes": 3, "endurance": 3}))
-            narrative_context += f" You see a {ent_name} looking {social['personality']}."
-            
-        if hazard:
-            ent_name = hazard['name']
-            ent_x = 50; ent_y = 50
-            self.current_battlemap["entities"].append({
-                "name": ent_name, "x": ent_x, "y": ent_y, "health": 50,
-                "personality": "Hazard", "task": "Trap or Puzzle"
-            })
-            if ent_name not in self.rules.entities:
-                self.rules.register_entity(CharacterSheet(ent_name, {"might": 1, "reflexes": 1, "endurance": 10}))
-            narrative_context += f" WARNING: The area contains a {ent_name}!"
-            
-        prompt_res = self.ai.generate_llm_prompt("The party arrived at a key location.", narrative_context)
-        self.bus.publish("NARRATIVE_OUTPUT", {"response": prompt_res})
-
     def _update_map_render(self):
+        # We need to preserve the reference to current map so AI can tick it
         if not hasattr(self, 'current_battlemap') or self.current_battlemap is None:
             self.current_battlemap = self.map_engine.get_battlemap(self.player_cx, self.player_cy)
             
-            # Check if this new map cell is a Story Node!
-            hook = self.story.check_for_story_node(self.player_cx, self.player_cy, party_level=1)
-            if hook:
-                self._inject_story_node(hook)
+            # Register physically spawned entities with the Rules Engine
+            for ent in self.current_battlemap.get("entities", []):
+                if ent["name"] not in self.rules.entities:
+                    stats = {"might": 5, "reflexes": 5, "endurance": 5}
+                    if "Bandit" in ent["name"]: stats = {"might": 4, "reflexes": 6, "endurance": 4}
+                    elif "Guard" in ent["name"]: stats = {"might": 7, "reflexes": 4, "endurance": 7}
+                    new_sheet = CharacterSheet(ent["name"], stats)
+                    self.rules.register_entity(new_sheet)
                 
         self.bus.publish("MAP_RENDER", {
             "battlemap": self.current_battlemap,
@@ -198,6 +121,7 @@ class SagaController:
         })
 
     def _update_hud(self):
+        """Pushes current player stats to the new Character HUD"""
         if self.player:
             self.bus.publish("HUD_UPDATE", {
                 "name": self.player.name,
@@ -210,6 +134,7 @@ class SagaController:
                 "trauma": self.player.trauma_tokens
             })
         else:
+            # No player initialized yet; skip HUD update to avoid None errors
             self.bus.publish("SYSTEM_LOG", "HUD_UPDATE skipped: no player initialized.")
 
     def _wire_events(self):
@@ -225,6 +150,7 @@ class SagaController:
         self.active_party_member_idx = 0
         self.player = sheet
         self.rules.register_entity(sheet)
+        
         self._init_world()
         
     def handle_player_action(self, payload):
@@ -266,15 +192,7 @@ class SagaController:
             if not self.current_battlemap:
                 self._update_map_render()
                 
-            # -- PURE CHAOS LOGIC (No longer tied to story) --
-            chaos = self.world.global_chaos
-            self.tension_meter += (0.02 + (chaos * 0.01))
-            
-            if random.random() < self.tension_meter:
-                self.tension_meter = 0.0
-                self._trigger_chaos_event()
-            # ------------------------------------
-                
+            # Tick the NPC AI every time the player moves
             entities = self.current_battlemap.get("entities", [])
             grid = self.current_battlemap.get("grid", [])
             self.npc_ai.tick(entities, grid, self.player_px, self.player_py)
@@ -285,15 +203,19 @@ class SagaController:
             sim_messages = self.map_engine.tick_simulation(hours=1)
             for msg in sim_messages:
                 self.bus.publish("SYSTEM_LOG", msg)
+                
             return
         
         intent_json = self.ai.parse_intent(intent_raw)
         target = intent_json.get("target", "Goblin")
         
+        # Tick the NPC AI for combat/action beats too
         entities = self.current_battlemap.get("entities", [])
         grid = self.current_battlemap.get("grid", [])
         self.npc_ai.tick(entities, grid, self.player_px, self.player_py)
+        # Update render to show movement immediately
         self._update_map_render()
+        
         self.world.advance_time()
         
         sim_messages = self.map_engine.tick_simulation(hours=1)
@@ -301,6 +223,8 @@ class SagaController:
             self.bus.publish("SYSTEM_LOG", msg)
             
         lore = self.lore.get_context_for_location(target)
+        
+        # Pull personality data if interacting with an entity
         personality_context = ""
         for ent in entities:
             if ent["name"].lower() in target.lower() or target.lower() in ent["name"].lower():
@@ -308,9 +232,11 @@ class SagaController:
                 t = ent.get("task", "standing around")
                 personality_context = f"\nNPC DATA: The target is {ent['name']}. They are currently {t}. Their personality is: {p}."
         
-        journal_summary = self.story.journal.get_journal_summary()
-        explicit_hook_directive = f"\nSYSTEM DIRECTIVE: Narrate within this active context. Active Quests:\n{journal_summary}\nCURRENT LOCAL OBJECTIVE: {self.current_hook.get('objective', 'Wandering')}"
+        explicit_hook_directive = ""
+        if "search" in intent_raw or "investigate" in intent_raw:
+             explicit_hook_directive = f"\nSYSTEM DIRECTIVE: Narrate the following objective: '{self.current_hook['objective']}'"
         
+        # Override naive parsing by looking for actual entities in intent
         matched_target = None
         for ent in entities:
             if ent["name"].lower() in intent_raw.lower():
@@ -320,6 +246,7 @@ class SagaController:
         if matched_target:
             target = matched_target
             
+        # If the target is NOT an entity, treat it as an environment/observation action
         if target not in self.rules.entities:
             biome = self.current_battlemap.get('biome', 'Unknown Terrain')
             weather = self.current_battlemap.get('weather', 'Clear')
@@ -328,17 +255,18 @@ class SagaController:
             mechanical_result = {"action": intent_raw, "success": True, "narrative_hint": f"The player interacts with or observes their surroundings. Environment: {env_desc}"}
         else:
             mechanical_result = self.rules.resolve_action(intent_raw, "Player", target)
-            
-        self.story.log_beat(intent_raw, str(mechanical_result))
+        
         self._update_hud()
         
-        prompt = self.ai.generate_llm_prompt(str(mechanical_result), lore + explicit_hook_directive + personality_context)
+        prompt = self.ai.generate_llm_prompt(mechanical_result, lore + explicit_hook_directive + personality_context)
         self.bus.publish("NARRATIVE_OUTPUT", {"response": prompt})
 
     def save_state(self, filepath: str = "saves/quicksave.json"):
         import os
         os.makedirs("saves", exist_ok=True)
+        
         entities_data = {name: sheet.to_dict() for name, sheet in self.rules.entities.items()}
+        
         state = {
             "player_coords": {
                 "cx": self.player_cx, "cy": self.player_cy,
@@ -348,8 +276,10 @@ class SagaController:
             "map_engine": self.map_engine.to_dict(),
             "story": self.story.to_dict()
         }
+        
         with open(filepath, "w") as f:
             json.dump(state, f, indent=4)
+            
         self.bus.publish("SYSTEM_LOG", f"Game saved to {filepath}.")
         
     def load_state(self, filepath: str = "saves/quicksave.json"):
@@ -357,25 +287,32 @@ class SagaController:
         if not os.path.exists(filepath):
             self.bus.publish("SYSTEM_LOG", "Save file not found.")
             return
+            
         with open(filepath, "r") as f:
             state = json.load(f)
+            
         coords = state.get("player_coords", {})
         self.player_cx = coords.get("cx", 12)
         self.player_cy = coords.get("cy", 12)
         self.player_px = coords.get("px", 50)
         self.player_py = coords.get("py", 50)
+        
         self.rules.entities.clear()
         for name, sheet_data in state.get("rules_registry", {}).items():
             sheet = CharacterSheet.from_dict(sheet_data)
             self.rules.register_entity(sheet)
             if name.startswith("Player"):
                 self.party.append(sheet)
+                
         if self.party:
             self.player = self.party[0]
+                
         if "map_engine" in state:
             self.map_engine = ClusterManager.from_dict(state["map_engine"])
+            
         if "story" in state:
             self.story = QuestWeaver.from_dict(state["story"])
+            
         self.current_battlemap = None
         self._update_map_render()
         self._update_hud()
