@@ -363,6 +363,10 @@ class SagaController:
             self._update_hud()
             return
         
+        if not self.player:
+            self.bus.publish("SYSTEM_LOG", "Cannot perform action: No character initialized. Please create or load a character.")
+            return
+            
         # Handle Continuous Damage (The Descent)
         if self.player.active_bleed:
             self.player.take_damage(1)
@@ -465,7 +469,7 @@ class SagaController:
             if not self.current_battlemap:
                 self._update_map_render()
                 
-            chaos = self.world.global_chaos
+            chaos = getattr(self.world, 'global_chaos', 0)
             self.tension_meter += (0.02 + (chaos * 0.01))
             
             if random.random() < self.tension_meter:
@@ -522,7 +526,7 @@ class SagaController:
                 personality_context = f"\nNPC DATA: The target is {ent['name']}. They are currently {t}. Their personality is: {p}."
         
         journal_summary = self.story.journal.get_journal_summary(self.player_cx, self.player_cy)
-        explicit_hook_directive = f"\nSYSTEM DIRECTIVE: Narrate within this active context. Active Quests:\n{journal_summary}\nCURRENT LOCAL OBJECTIVE: {self.current_hook.get('objective', 'Wandering')}"
+        explicit_hook_directive = f"\nSYSTEM DIRECTIVE: Narrate within this active context. Active Quests:\n{journal_summary}\nCURRENT LOCAL OBJECTIVE: {getattr(self, 'current_hook', {}).get('objective', 'Wandering')}"
         
         matched_target = None
         for ent in entities:
@@ -669,7 +673,7 @@ class SagaController:
         self.story.log_beat(intent_raw, str(mechanical_result))
         self._update_hud()
         
-        prompt = self.ai.generate_llm_prompt(str(mechanical_result), lore + explicit_hook_directive + personality_context)
+        prompt = self.ai.generate_llm_prompt(str(mechanical_result), lore + explicit_hook_directive + personality_context, intent_raw=intent_raw)
         self.bus.publish("NARRATIVE_OUTPUT", {"response": prompt})
 
     def _handle_vendor_trade(self, vendor_name: str):

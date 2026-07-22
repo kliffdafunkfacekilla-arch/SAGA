@@ -52,9 +52,17 @@ class AIDirector:
         target = parts[0] if parts else ""
         return {"target": target}
 
-    def generate_llm_prompt(self, mechanical_result: str, context: str) -> str:
+    def generate_llm_prompt(self, mechanical_result: str, context: str, intent_raw: str = None) -> str:
+        action_directive = ""
+        if intent_raw:
+            if "talk to" in intent_raw.lower():
+                action_directive = f"The player's action is: '{intent_raw}'. CRITICAL: Generate the NPC's direct spoken dialogue in quotes, responding in character. Do not just describe the scene.\n"
+            else:
+                action_directive = f"The player's action is: '{intent_raw}'.\n"
+                
         prompt = (
             f"You are the narrator of a tabletop RPG. Use the mechanical result and the given context to produce a short, vivid description.\n"
+            f"{action_directive}"
             f"Mechanics: {mechanical_result}\n"
             f"Context:{context}\n"
             "Response:"

@@ -97,14 +97,14 @@ class BattleMapCanvas(QGraphicsView):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.RightButton or event.button() == Qt.MouseButton.LeftButton:
-            scene_pos = self.mapToScene(event.pos())
+            scene_pos = self.mapToScene(event.position().toPoint())
             vx_start = max(0, self.player_x - 10)
             vy_start = max(0, self.player_y - 10)
             
             clicked_x = int(scene_pos.x() // self.tile_size) + vx_start
             clicked_y = int(scene_pos.y() // self.tile_size) + vy_start
             
-            self.show_context_menu(event.globalPos(), clicked_x, clicked_y)
+            self.show_context_menu(event.globalPosition().toPoint(), clicked_x, clicked_y)
         else:
             super().mousePressEvent(event)
             
