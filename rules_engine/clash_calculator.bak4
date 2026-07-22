@@ -44,16 +44,14 @@ class ClashCalculator:
     def register_entity(self, sheet: CharacterSheet):
         self.entities[sheet.name] = sheet
         
-    def resolve_action(self, intent: str, actor_name: str, target_name: str, weather: str = "Clear", global_tags: list = None, chaos_state: dict = None) -> dict:
+    def resolve_action(self, intent: str, actor_name: str, target_name: str, weather: str = "Clear", global_tags: list = None) -> dict:
         """
-        The Master Resolution Pipeline.
+        Calculates damage and applies the strict BRUTAL Engine Trauma Pipeline.
+        Also parses functional skills and applies them via the Effects Engine.
         """
         from rules_engine.skills_data import PASSIVE_HARDWARE, SUBCONSCIOUS_MAGIC, ANOMALIES
         from rules_engine.effects import execute_effects
         
-        if not chaos_state:
-            chaos_state = {"ticks": 0, "number": 10}
-            
         if global_tags is None:
             global_tags = []
             
@@ -84,7 +82,22 @@ class ClashCalculator:
                 if matched_skill: break
             if matched_skill: break
             
-
+        if matched_skill:
+            # Execute Functional Skill
+            cost = matched_skill.get("cost", {})
+            if cost:
+                actor.apply_action_cost(cost)
+            
+            logs = execute_effects(actor, target, matched_skill, self)
+            
+            return {
+                "action": intent,
+                "success": True,
+                "is_clash": False,
+                "damage": 0,
+                "narrative_hint": f"[WEATHER: {weather}] " + " | ".join(logs)
+            }
+            
         # Check Disadvantage State (Adrenaline Shock)
         disadvantage = False
         if hasattr(actor, "has_disadvantage") and actor.has_disadvantage:
@@ -104,86 +117,13 @@ class ClashCalculator:
         roll_2 = random.randint(1, 20)
         base_roll = min(roll_1, roll_2) if disadvantage else roll_1
         
-        
-        # Check Chaos & Glitch (Chapter 6)
+        # Skill Checks & Magic
         is_magic = "cast" in intent.lower() or "channel" in intent.lower()
         is_finesse = "sneak" in intent.lower() or "finesse" in intent.lower()
         is_skill_only = "pick" in intent.lower() or ("sneak" in intent.lower() and "attack" not in intent.lower())
         
-        glitch_triggered = False
-        glitch_narrative = ""
-        
-        if is_magic or matched_skill:
-            ticks = chaos_state["ticks"]
-            c_num = chaos_state["number"]
-            margin = 0
-            if 4 <= ticks <= 6: margin = 1
-            elif ticks >= 7: margin = 2
-            
-            if abs(base_roll - c_num) <= margin:
-                glitch_triggered = True
-                chaos_state["ticks"] += 1
-                chaos_state["number"] = random.randint(1, 20)
-                
-                glitch_roll = random.randint(1, 6)
-                res = random.choice(WILD_RESONANCE_TABLE)
-                if glitch_roll <= 2:
-                    glitch_narrative = f"[GLITCH! Full Hijack] {res} (Target Random)"
-                elif glitch_roll <= 4:
-                    glitch_narrative = f"[GLITCH! Targeted Hijack] {res}"
-                else:
-                    glitch_narrative = f"[GLITCH! Pure Luck] Reality stabilizes. (Chaos Ticks +1)"
-            else:
-                # Still ticks up if eligible action is used
-                chaos_state["ticks"] += 1
-                chaos_state["number"] = random.randint(1, 20)
-                
-        # Channeling the Chaos (0 tokens)
-        channeling = False
-        if is_magic and actor.active_focus <= 0:
-            channeling = True
-            chaos_die = random.randint(1, 20)
-            c_num = chaos_state["number"]
-            if chaos_die == c_num:
-                glitch_narrative += " [CHANNELING: Perfect Flow! Double Effect. +1 Tick]"
-                chaos_state["ticks"] += 1
-            elif abs(chaos_die - c_num) <= 5:
-                res = random.choice(WILD_RESONANCE_TABLE)
-                glitch_narrative += f" [CHANNELING: Volatile. {res} +1 Tick]"
-                chaos_state["ticks"] += 1
-            else:
-                res = random.choice(WILD_RESONANCE_TABLE)
-                glitch_narrative += f" [CHANNELING: Rejected! Action fails. {res} (Targets Self). +2 Ticks]"
-                chaos_state["ticks"] += 2
-                # Force failure early
-                return {
-                    "action": intent,
-                    "success": False,
-                    "is_clash": False,
-                    "damage": 0,
-                    "chaos_state": chaos_state,
-                    "narrative_hint": f"[WEATHER: {weather}] {glitch_narrative}"
-                }
-        
-        if matched_skill:
-            # Execute Functional Skill
-            cost = matched_skill.get("cost", {})
-            if cost and not channeling:
-                actor.apply_action_cost(cost)
-            
-            logs = execute_effects(actor, target, matched_skill, self)
-            
-            return {
-                "action": intent,
-                "success": True,
-                "is_clash": False,
-                "damage": 0,
-                "chaos_state": chaos_state,
-                "narrative_hint": f"[WEATHER: {weather}] {glitch_narrative} | " + " | ".join(logs)
-            }
-            
         if is_magic:
-            if not channeling: actor.apply_action_cost({"focus": 2})
+            actor.apply_action_cost({"focus": 2})
             actor_roll = base_roll + actor.get_stat("logic")
             target_defense = 10 + target.get_stat("willpower")
         elif is_skill_only:
@@ -216,14 +156,11 @@ class ClashCalculator:
             "success": success,
             "is_clash": is_clash,
             "damage": 0,
-            "chaos_state": chaos_state,
             "narrative_hint": ""
         }
         
         # Build narrative hint context
         env_context = f"[WEATHER: {weather} | TAGS: {', '.join(global_tags)}] " if global_tags else f"[WEATHER: {weather}] "
-        if glitch_narrative:
-            env_context += glitch_narrative + " | "
         
         if is_clash:
             # 3-Beat Pulse Clash Drain

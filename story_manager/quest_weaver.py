@@ -40,9 +40,28 @@ class QuestJournal:
             return quest
         return None
             
-    def get_journal_summary(self) -> str:
+    def get_journal_summary(self, current_cx: int = None, current_cy: int = None) -> str:
         if not self.active_quests: return "No active quests."
-        return "\n".join([f"- [Stage {q.get('stage', 1)} | LOC: {q.get('target_cx')},{q.get('target_cy')}] {q['objective']} (Source: {q['source']})" for q in self.active_quests])
+        
+        summary = []
+        for q in self.active_quests:
+            tcx = q.get('target_cx')
+            tcy = q.get('target_cy')
+            
+            direction = "Unknown"
+            if current_cx is not None and current_cy is not None and tcx is not None and tcy is not None:
+                if tcx == current_cx and tcy == current_cy:
+                    direction = "You are at the location!"
+                else:
+                    dx = tcx - current_cx
+                    dy = tcy - current_cy
+                    ns = "South" if dy > 0 else "North" if dy < 0 else ""
+                    ew = "East" if dx > 0 else "West" if dx < 0 else ""
+                    dist = abs(dx) + abs(dy)
+                    direction = f"{dist} regions {ns}{ew}"
+                    
+            summary.append(f"- [Stage {q.get('stage', 1)} | Direction: {direction}] {q['objective']}")
+        return "\n".join(summary)
         
     def to_dict(self):
         return {
@@ -62,7 +81,6 @@ class QuestWeaver:
         self.journal = QuestJournal()
         self.beat_history = []
         
-        # Base Campaign Themes
         self.campaign_themes = [
             {"type": "The Warlord", "base_objective": "Dismantle the local Warlord's grip on the region."},
             {"type": "The Artifact", "base_objective": "Track down rumors of a pre-Sundering artifact."},
@@ -93,29 +111,21 @@ class QuestWeaver:
             self.beat_history.pop(0)
 
     def initialize_campaign(self, current_cx: int, current_cy: int):
-        """Starts a new campaign and sets the first target location."""
         if not self.journal.active_quests:
             theme = random.choice(self.campaign_themes)
-            # Pick a location 1-2 cells away
             target_cx = current_cx + random.randint(-2, 2)
             target_cy = current_cy + random.randint(-2, 2)
             self.journal.add_quest(theme["base_objective"], "World Generator", stage=1, target_cx=target_cx, target_cy=target_cy)
 
     def check_for_story_node(self, cx: int, cy: int, party_level: int = 1) -> dict:
-        """
-        Checks if the provided coordinates match an active story node.
-        If yes, it generates the hook for that stage and advances the campaign to a new location.
-        If no, returns None.
-        """
         if not self.journal.active_quests:
             return None
             
         current_quest = self.journal.active_quests[-1]
         
         if current_quest.get("target_cx") != cx or current_quest.get("target_cy") != cy:
-            return None # Not the story location, nothing happens here!
+            return None
             
-        # We are at the story node! Generate the event based on the stage.
         hook = {"id": f"story_{cx}_{cy}_{int(time.time())}"}
         stage = current_quest.get("stage", 1)
         base_objective = current_quest["objective"]
@@ -131,7 +141,6 @@ class QuestWeaver:
                 hook["type"] = template["type"]
                 hook["objective"] = f"{base_objective} -> {template['objective']}"
             
-            # Progress to stage 2 at a new location
             self.journal.complete_quest(-1)
             new_cx = cx + random.randint(-1, 1)
             new_cy = cy + random.randint(-1, 1)
@@ -159,8 +168,6 @@ class QuestWeaver:
             hook["type"] = "Final Showdown"
             hook["objective"] = f"{base_objective} -> You have cornered the target. A brutal fight ensues!"
             hook["grunt_pack"] = GruntPack("Elite Guard", "Heavies", random.randint(3, 5), party_level).to_dict()
-            
-            # Complete the campaign thread completely (no new location generated)
             self.journal.complete_quest(-1)
             return hook
         

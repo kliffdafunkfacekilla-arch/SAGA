@@ -1,13 +1,12 @@
 class Item:
     """Represents a physical item in the BRUTAL engine."""
     def __init__(self, name: str, item_type: str, stat_type: str, modifier: int, loadout_cost: int, 
-                 quantity: int = 1, consumable_effect: dict = None, tags: list = None, armor_mod: int = 0):
+                 quantity: int = 1, consumable_effect: dict = None, tags: list = None):
         self.name = name
         self.item_type = item_type
         self.stat_type = stat_type.lower()
         self.modifier = modifier
         self.loadout_cost = loadout_cost
-        self.armor_mod = armor_mod
         
         # New Phase 2 properties
         self.quantity = quantity
@@ -21,7 +20,6 @@ class Item:
             "stat_type": self.stat_type,
             "modifier": self.modifier,
             "loadout_cost": self.loadout_cost,
-            "armor_mod": self.armor_mod,
             "quantity": self.quantity,
             "consumable_effect": self.consumable_effect,
             "tags": self.tags

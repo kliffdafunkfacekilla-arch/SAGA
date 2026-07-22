@@ -34,12 +34,6 @@ class CharacterSheet:
         self.is_stabilized = True
         self.has_disadvantage = False
         
-        # Chapter 5 Trauma Pipeline properties
-        self.injury_tallies = []
-        self.active_bleed = False
-        self.active_trauma = False
-        self.is_zero_state = False
-        
         # Functional State
         self.tags = set()
         self.modifiers = {}
@@ -64,51 +58,23 @@ class CharacterSheet:
         # Active Battery: All combatants initialize with 10 tokens
         self.active_stamina = 10
         self.active_focus = 10
-        self.is_zero_state = False
         
     def get_reserve_pool(self) -> int:
         """Reserve pool is capacity minus gear tax."""
-        tax = self.inventory.get_physical_tax() + self.inventory.get_mental_tax()
+        tax = 0
+        for slot, item in self.inventory.slots.items():
+            if item:
+                tax += item.loadout_cost
         return self.max_stamina - tax - self.trauma_tokens
         
     def get_stat(self, stat_name: str) -> int:
-        if self.is_zero_state:
-            return 0 # All stats collapse, resulting in flat DC 10
-            
         base = self.stats.get(stat_name.lower(), 0)
         # Apply gear modifiers
         gear_mod = self.inventory.get_total_modifier(stat_name)
         return base + gear_mod
         
-    def get_derived_stat(self, stat_name: str) -> int:
-        stat_name = stat_name.lower()
-        if stat_name == "perception":
-            return self.get_stat("awareness") + self.get_stat("logic") + self.get_stat("vitality")
-        elif stat_name in ["stealth", "camo"]:
-            return self.get_stat("knowledge") + self.get_stat("charm") + self.get_stat("finesse")
-        elif stat_name in ["movement", "speed"]:
-            return self.get_stat("reflexes") + self.get_stat("might") + self.get_stat("intuition")
-        elif stat_name in ["balance", "sure-footedness"]:
-            return self.get_stat("endurance") + self.get_stat("fortitude") + self.get_stat("willpower")
-        return 0
-        
-    def is_physically_encumbered(self) -> bool:
-        """Returns True if physical gear tax exceeds 50% of Stamina Capacity."""
-        return self.inventory.get_physical_tax() > (self.max_stamina / 2)
-        
-    def is_mentally_encumbered(self) -> bool:
-        """Returns True if mental gear tax exceeds 50% of Focus Capacity."""
-        return self.inventory.get_mental_tax() > (self.max_focus / 2)
-        
-    def take_damage(self, amount: int, is_composure: bool = False):
-        if is_composure:
-            self.current_composure -= amount
-            if self.current_composure <= 0:
-                self.is_zero_state = True
-        else:
-            self.current_hp -= amount
-            if self.current_hp <= 0:
-                self.is_zero_state = True
+    def take_damage(self, amount: int):
+        self.current_hp = max(0, self.current_hp - amount)
         
     def apply_action_cost(self, cost: dict):
         self.active_stamina -= cost.get("stamina", 0)
@@ -119,19 +85,12 @@ class CharacterSheet:
         if not item.consumable_effect:
             return False
             
-        is_healing = False
         if "heal" in item.consumable_effect:
             self.current_hp = min(self.max_hp, self.current_hp + item.consumable_effect["heal"])
-            is_healing = True
         if "stamina" in item.consumable_effect:
             self.active_stamina = min(self.max_stamina, self.active_stamina + item.consumable_effect["stamina"])
         if "focus" in item.consumable_effect:
             self.active_focus = min(self.max_focus, self.active_focus + item.consumable_effect["focus"])
-            
-        if is_healing and self.is_zero_state and self.current_hp > 0:
-            self.is_zero_state = False
-            self.active_stamina = 0
-            self.active_focus = 0
             
         item.quantity -= 1
         return True
