@@ -121,3 +121,36 @@ SKILL_TRACKS = {
     "Aura": "charm",
     "Lex": "willpower"
 }
+
+OFFENSE_TRACKS = {
+    "The Wrangler": "might",
+    "The Dervish": "reflex",
+    "The Sunderer": "fortitude",
+    "The Sniper": "awareness",
+    "The Harrier": "intuition",
+    "The Saboteur": "knowledge"
+}
+
+DEFENSE_TRACKS = {
+    "The Sponge": "endurance",
+    "The Ghost": "finesse",
+    "The Medic": "vitality",
+    "The Warden": "logic",
+    "The Commander": "charm",
+    "The Vanguard": "willpower"
+}
+
+POWER_TRACKS = {
+    "Mass": "might",
+    "Ordo": "endurance",
+    "Flux": "finesse",
+    "Motus": "reflex",
+    "Vita": "vitality",
+    "Nexus": "fortitude",
+    "Ratio": "logic",
+    "Anumis": "knowledge",
+    "Lux": "awareness",
+    "Omen": "intuition",
+    "Aura": "charm",
+    "Lex": "willpower"
+}

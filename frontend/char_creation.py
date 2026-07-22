@@ -5,12 +5,13 @@ from PyQt6.QtWidgets import (
     QMessageBox, QScrollArea, QGridLayout
 )
 from PyQt6.QtCore import Qt
-from rules_engine.chassis_data import KINGDOMS, SUB_TYPES, BASE_STATS, ORIGINS, SKILL_TRACKS
+from rules_engine.chassis_data import (KINGDOMS, SUB_TYPES, BASE_STATS, ORIGINS, 
+                                       OFFENSE_TRACKS, DEFENSE_TRACKS, POWER_TRACKS)
 
 class CharacterCreationScreen(QWidget):
-    def __init__(self, bus):
+    def __init__(self, on_complete=None):
         super().__init__()
-        self.bus = bus
+        self.on_complete = on_complete
         self.setStyleSheet("background-color: #222; color: white;")
         self.layout = QVBoxLayout()
         self.setLayout(self.layout)
@@ -22,7 +23,7 @@ class CharacterCreationScreen(QWidget):
         self.stack = QStackedWidget()
         self.layout.addWidget(self.stack)
         
-        self.step_label = QLabel("Step 1 of 5")
+        self.step_label = QLabel("Step 1 of 4")
         self.layout.addWidget(self.step_label)
         
         nav_layout = QHBoxLayout()
@@ -40,7 +41,6 @@ class CharacterCreationScreen(QWidget):
         self._init_step2()
         self._init_step3()
         self._init_step4()
-        self._init_step5()
         
         self.stack.setCurrentIndex(0)
         self.update_nav()
@@ -125,63 +125,30 @@ class CharacterCreationScreen(QWidget):
         page = QWidget()
         layout = QVBoxLayout()
         
-        info = QLabel("Life Experience Phase: Allocate exactly +3 Body points and +3 Mind points.\nBiological Ceiling is 8.")
-        layout.addWidget(info)
-        
-        grid = QGridLayout()
-        self.stat_spinboxes = {}
-        
-        self.body_stats = ["Might", "Endurance", "Finesse", "Reflex", "Vitality", "Fortitude"]
-        self.mind_stats = ["Knowledge", "Logic", "Awareness", "Intuition", "Charm", "Willpower"]
-        
-        row = 0
-        grid.addWidget(QLabel("Body Stats (+3)"), row, 0)
-        grid.addWidget(QLabel("Mind Stats (+3)"), row, 2)
-        row += 1
-        
-        for i in range(6):
-            b_stat = self.body_stats[i]
-            b_sb = QSpinBox()
-            b_sb.setRange(0, 3)
-            self.stat_spinboxes[b_stat.lower()] = b_sb
-            grid.addWidget(QLabel(b_stat), row, 0)
-            grid.addWidget(b_sb, row, 1)
-            
-            m_stat = self.mind_stats[i]
-            m_sb = QSpinBox()
-            m_sb.setRange(0, 3)
-            self.stat_spinboxes[m_stat.lower()] = m_sb
-            grid.addWidget(QLabel(m_stat), row, 2)
-            grid.addWidget(m_sb, row, 3)
-            
-            row += 1
-            
-        layout.addLayout(grid)
-        page.setLayout(layout)
-        self.stack.addWidget(page)
-        
-    def _init_step4(self):
-        page = QWidget()
-        layout = QVBoxLayout()
-        
-        info = QLabel("Professional Training: Select exactly 6 Skill Tracks.\nEach grants +2 to its governing attribute.")
+        info = QLabel("Professional Training: Choose 1 Offense, 1 Defense, and 2 Power tracks.\nEach grants +2 to its governing attribute.")
         layout.addWidget(info)
         
         scroll = QScrollArea()
         scroll_w = QWidget()
         grid = QGridLayout()
         
-        self.track_checkboxes = []
-        row, col = 0, 0
-        for track, stat in SKILL_TRACKS.items():
-            cb = QCheckBox(f"{track} (+2 {stat.title()})")
-            self.track_checkboxes.append((track, cb, stat))
-            grid.addWidget(cb, row, col)
-            col += 1
-            if col > 1:
-                col = 0
-                row += 1
-                
+        self.offense_cbs = []
+        self.defense_cbs = []
+        self.power_cbs = []
+        
+        def populate(title, col, track_dict, cb_list):
+            grid.addWidget(QLabel(f"<b>{title}</b>"), 0, col)
+            r = 1
+            for name, stat in track_dict.items():
+                cb = QCheckBox(f"{name} (+2 {stat.title()})")
+                cb_list.append((name, cb, stat))
+                grid.addWidget(cb, r, col)
+                r += 1
+
+        populate("Offense (Pick 1)", 0, OFFENSE_TRACKS, self.offense_cbs)
+        populate("Defense (Pick 1)", 1, DEFENSE_TRACKS, self.defense_cbs)
+        populate("Power (Pick 2)", 2, POWER_TRACKS, self.power_cbs)
+        
         scroll_w.setLayout(grid)
         scroll.setWidget(scroll_w)
         scroll.setWidgetResizable(True)
@@ -190,17 +157,14 @@ class CharacterCreationScreen(QWidget):
         page.setLayout(layout)
         self.stack.addWidget(page)
         
-    def _init_step5(self):
+    def _init_step4(self):
         page = QWidget()
         layout = QVBoxLayout()
         
         self.summary_label = QLabel("Summary will appear here.")
         layout.addWidget(self.summary_label)
         
-        btn_finalize = QPushButton("Finalize Party & Enter Drift")
-        btn_finalize.setStyleSheet("padding: 10px; background-color: #550000; color: white; font-weight: bold;")
-        btn_finalize.clicked.connect(self._on_finalize)
-        layout.addWidget(btn_finalize)
+        # We rely on the parent window's LAUNCH ENGINE button now.
         
         page.setLayout(layout)
         self.stack.addWidget(page)
@@ -220,16 +184,20 @@ class CharacterCreationScreen(QWidget):
                 QMessageBox.warning(self, "Error", "Chassis Designation required.")
                 return
         if idx == 2:
-            body_pts = sum(self.stat_spinboxes[s.lower()].value() for s in self.body_stats)
-            mind_pts = sum(self.stat_spinboxes[s.lower()].value() for s in self.mind_stats)
-            if body_pts != 3 or mind_pts != 3:
-                QMessageBox.warning(self, "Error", f"Must allocate exactly 3 Body (current: {body_pts}) and 3 Mind (current: {mind_pts}).")
+            num_off = sum(1 for _, cb, _ in self.offense_cbs if cb.isChecked())
+            num_def = sum(1 for _, cb, _ in self.defense_cbs if cb.isChecked())
+            num_pow = sum(1 for _, cb, _ in self.power_cbs if cb.isChecked())
+            
+            if num_off != 1:
+                QMessageBox.warning(self, "Error", f"Must select exactly 1 Offense Track (You have {num_off}).")
                 return
-        if idx == 3:
-            selected = sum(1 for _, cb, _ in self.track_checkboxes if cb.isChecked())
-            if selected != 6:
-                QMessageBox.warning(self, "Error", f"Must select exactly 6 Skill Tracks. Currently selected: {selected}")
+            if num_def != 1:
+                QMessageBox.warning(self, "Error", f"Must select exactly 1 Defense Track (You have {num_def}).")
                 return
+            if num_pow != 2:
+                QMessageBox.warning(self, "Error", f"Must select exactly 2 Power Tracks (You have {num_pow}).")
+                return
+                
             self._generate_summary()
             
         if idx < self.stack.count() - 1:
@@ -255,14 +223,13 @@ class CharacterCreationScreen(QWidget):
             shift_stat = self.shift_choice.currentText().lower()
             base[shift_stat] += 1
             
-        # 3. Life Experience
-        for stat, sb in self.stat_spinboxes.items():
-            base[stat] += sb.value()
-            
-        # 4. Professional Training
-        for track, cb, stat in self.track_checkboxes:
+        # 3. Professional Training
+        self.selected_tracks = []
+        all_cbs = self.offense_cbs + self.defense_cbs + self.power_cbs
+        for track, cb, stat in all_cbs:
             if cb.isChecked():
                 base[stat] += 2
+                self.selected_tracks.append((track, cb, stat))
                 
         # 5. Biological Ceiling & Overflow
         body = ["might", "endurance", "finesse", "reflex", "vitality", "fortitude"]
@@ -303,14 +270,17 @@ class CharacterCreationScreen(QWidget):
         
         self.summary_label.setText(summary)
         
-    def _on_finalize(self):
+    def get_character_payload(self):
         name = self.name_input.text().strip()
         kingdom = self.kingdom_combo.currentText()
         origin = self.origin_combo.currentText()
         
+        if not hasattr(self, 'final_stats'):
+            return None
+            
         payload = {
             "name": name,
             "origin": f"{kingdom}-{origin}",
             "stats": self.final_stats
         }
-        self.bus.publish("UI_FINALIZE_PARTY", payload)
+        return payload

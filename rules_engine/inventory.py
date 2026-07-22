@@ -58,6 +58,9 @@ class Inventory:
             self.slots[slot] = item
             return True
         return False
+        
+    def add_item(self, item: Item):
+        self.bag.append(item)
             
     def get_physical_tax(self) -> int:
         tax = 0

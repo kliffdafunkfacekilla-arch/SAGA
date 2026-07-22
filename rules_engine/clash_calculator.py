@@ -1,316 +1,233 @@
 import random
 from rules_engine.character_sheet import CharacterSheet
 
-WILD_RESONANCE_TABLE = [
-    "Kinetic Reversal: Damage heals the target; healing causes equivalent damage.",
-    "Elemental Swap: The action's element changes to its Bane.",
-    "Gravitational Slingshot: Attacker and target are pulled into adjacent spaces.",
-    "Vocal Echo: The action emits an Echoing boom; the entire Zone gains the Muted tag for 1 round.",
-    "Aetheric Tether: Attacker and target share a health pool for 1 round.",
-    "Temporal Stutter: Action fails now; resolves automatically at the start of the next round.",
-    "Dimensional Phase: Target becomes Incorporeal for 1 beat.",
-    "Friction Loss: Target and Attacker pushed 2 Zones apart; ground becomes Unstable.",
-    "Psychic Backlash: Action converts entirely to Composure Damage.",
-    "Magnetic Attraction: All Metal objects in the Zone fly toward the target.",
-    "Sensory Swap: Attacker is Blinded but sees through the target's eyes for 1 turn.",
-    "Accelerated Rot: Used weapons or focuses gain the Brittle tag.",
-    "Mirror Clones: Target fractures into 3 illusions. Attacks against the target suffer Disadvantage.",
-    "Thermal Vacuum: Room hits absolute zero; applies Sapped to everyone in the Zone.",
-    "Overclocked Force: Double damage/effect, but destroys the weapon or focus used.",
-    "Amnesia Spike: Attacker forgets the skill used; it is unavailable until the next rest.",
-    "Blood to Acid: Attack deals equivalent Acid damage back to the attacker.",
-    "Polymorph Glitch: Target becomes a harmless mundane animal for 1 beat.",
-    "Resurrection Spark: Nearest corpse revived as a hostile undead.",
-    "The Perfect Storm: CRITICAL SYSTEM FAILURE. Action is an automatic Critical Hit bypassing all armor. Add +3 Ticks to the Chaos Tracker."
-]
-
+# Opposed Roll Clash Matrix based on Tactic choices
 CLASH_MATRIX = {
-    "press": {"physical_stat": "might", "mental_stat": "knowledge", "delivery": "Steps 1 space forward, overpowering the center.", "vulnerability": "Overcommits; suffers amplified counter-damage."},
-    "hold": {"physical_stat": "endurance", "mental_stat": "logic", "delivery": "Anchors in place; strike delivered from fixed stance.", "vulnerability": "Arcane Note: Spells detonate in the middle, creating a Hazard."},
-    "maneuver": {"physical_stat": "reflexes", "mental_stat": "intuition", "delivery": "Shifts 1 space; strikes from a flanking angle.", "vulnerability": "Attempts to side-step; moves directly into the hit."},
-    "trick": {"physical_stat": "finesse", "mental_stat": "awareness", "delivery": "Alters strike frequency; bypasses all blocks.", "vulnerability": "Bluff exposed; left Stunned by psychological shock."},
-    "feint": {"physical_stat": "fortitude", "mental_stat": "willpower", "delivery": "Bait & Switch: Instantly switches spaces with the loser.", "vulnerability": "Staggered: Steps out of stance; absorbs strike unprotected."},
-    "disengage": {"physical_stat": "vitality", "mental_stat": "charm", "delivery": "Delivers parting strike; leaps 1 space backward.", "vulnerability": "Caught flat-footed; impact throws them farther backward."}
+    "press": {
+        "press": "Both take increased damage.",
+        "maneuver": "Maneuver wins: Move behind and strike.",
+        "feint": "Press wins: Pushes through the feint.",
+        "disengage": "Press wins: Push back."
+    },
+    "maneuver": {
+        "press": "Maneuver wins: Move behind and strike.",
+        "maneuver": "Both stumble and lose footing.",
+        "feint": "Feint wins: Disarms the maneuvering opponent.",
+        "disengage": "Maneuver wins: Intercepts the retreat."
+    },
+    "feint": {
+        "press": "Press wins: Pushes through the feint.",
+        "maneuver": "Feint wins: Disarms the maneuvering opponent.",
+        "feint": "Both are stunned by mutual bluffs.",
+        "disengage": "Feint wins: Disarms before retreat."
+    },
+    "disengage": {
+        "press": "Press wins: Push back.",
+        "maneuver": "Maneuver wins: Intercepts the retreat.",
+        "feint": "Feint wins: Disarms before retreat.",
+        "disengage": "Both step back safely."
+    }
 }
 
 class ClashCalculator:
-    """
-    The Ultimate Rules Engine.
-    Maintains all character state, inventories, and resolves actions deterministically.
-    """
     def __init__(self):
         self.entities = {}
         
     def register_entity(self, sheet: CharacterSheet):
         self.entities[sheet.name] = sheet
-        
-    def resolve_action(self, intent: str, actor_name: str, target_name: str, weather: str = "Clear", global_tags: list = None, chaos_state: dict = None) -> dict:
-        """
-        The Master Resolution Pipeline.
-        """
-        from rules_engine.skills_data import PASSIVE_HARDWARE, SUBCONSCIOUS_MAGIC, ANOMALIES
-        from rules_engine.effects import execute_effects
-        
-        if not chaos_state:
-            chaos_state = {"ticks": 0, "number": 10}
-            
-        if global_tags is None:
-            global_tags = []
-            
-        actor = self.entities.get(actor_name)
-        target = self.entities.get(target_name)
-        
-        if not actor or not target:
-            return {"action": intent, "error": "Entities not found in Rules Engine state.", "narrative_hint": "A glitch in the simulation prevents this action."}
-            
-        # Check Stabilization State (Cannot act if bleeding out)
-        if hasattr(actor, "is_stabilized") and not actor.is_stabilized:
-            return {
-                "action": intent,
-                "success": False,
-                "damage": 0,
-                "narrative_hint": f"[CRITICAL FAILURE] {actor.name} is bleeding out and requires Stabilization to act!"
-            }
-            
-        # Search for skill in intent
-        matched_skill = None
-        for category in [PASSIVE_HARDWARE.values(), SUBCONSCIOUS_MAGIC.values(), ANOMALIES.values()]:
-            for group in category:
-                if type(group) == dict:
-                    for tier, skill in group.items():
-                        if type(skill) == dict and skill.get("name", "").lower() in intent.lower():
-                            matched_skill = skill
-                            break
-                if matched_skill: break
-            if matched_skill: break
-            
 
-        # Check Disadvantage State (Adrenaline Shock)
-        disadvantage = False
-        if hasattr(actor, "has_disadvantage") and actor.has_disadvantage:
-            disadvantage = True
-            actor.has_disadvantage = False # Clears after one roll
+    def get_attack_stats(self, weapon_name: str, is_ranged: bool) -> tuple:
+        """Returns (body_stat, mind_stat) based on the weapon."""
+        name = weapon_name.lower()
+        if is_ranged:
+            if "bow" in name and "cross" not in name: return ("might", "awareness") # Bows
+            if "crossbow" in name: return ("finesse", "logic")
+            if "javelin" in name or "axe" in name or "throw" in name: return ("vitality", "willpower") # Thrown
+            if "gun" in name or "powder" in name or "musket" in name or "flintlock" in name: return ("endurance", "knowledge") # Black Powder
+            if "grenade" in name or "siege" in name or "cannon" in name or "ballista" in name: return ("fortitude", "charm") # Alchemical/Siege
+            return ("reflexes", "intuition") # Exotic (Boomerangs/Bolas) fallback
+        else:
+            if "great" in name or "claymore" in name or "two-hand" in name or "heavy" in name: return ("might", "willpower") # 2-Handed
+            if "hammer" in name or "mace" in name or "blunt" in name: return ("fortitude", "logic")
+            if "spear" in name or "halberd" in name or "pole" in name: return ("endurance", "awareness")
+            if "dagger" in name or "rapier" in name or "finesse" in name or "sword" in name: return ("finesse", "intuition")
+            if "whip" in name or "flail" in name: return ("reflexes", "charm")
+            return ("vitality", "knowledge") # unarmed fallback
+
+    def get_defense_stats(self, armor_name: str) -> tuple:
+        """Returns (body_stat, mind_stat) based on armor."""
+        name = armor_name.lower()
+        if "plate" in name or "heavy" in name: return ("fortitude", "willpower")
+        if "mail" in name or "medium" in name: return ("endurance", "logic")
+        if "leather" in name or "light" in name: return ("reflexes", "awareness")
+        if "robe" in name or "cloth" in name: return ("finesse", "intuition")
+        if "tower" in name or "heavy shield" in name: return ("might", "knowledge")
+        if "buckler" in name or "shield" in name: return ("vitality", "charm") # Light shields
+        return ("reflexes", "awareness") # unarmored fallback
+
+    def resolve_attack(self, attacker_name: str, defender_name: str, intent: str, is_ranged: bool = False) -> dict:
+        attacker = self.entities.get(attacker_name)
+        defender = self.entities.get(defender_name)
+
+        if not attacker or not defender:
+            return {"action": intent, "success": False, "narrative_hint": "Combatants not found."}
+
+        # 1. Calculate Attacker Score
+        weapon = attacker.inventory.slots.get("weapon")
+        weapon_name = weapon.name if weapon else "Fists"
+        weapon_mod = weapon.modifier if weapon else 0
+        b_stat, m_stat = self.get_attack_stats(weapon_name, is_ranged)
+        
+        # Determine if it's a mind or body variant based on stat_type, defaulting to body
+        active_att_stat = m_stat if (weapon and getattr(weapon, "stat_type", "") == m_stat) else b_stat
+        att_stat_val = attacker.stats.get(active_att_stat, 0)
+        
+        att_roll = random.randint(1, 20)
+        att_total = att_roll + att_stat_val + weapon_mod
+
+        # 2. Calculate Defender Score
+        armor = defender.inventory.slots.get("body")
+        armor_name = armor.name if armor else "Clothing"
+        armor_mod = armor.armor_mod if armor else 0
+        db_stat, dm_stat = self.get_defense_stats(armor_name)
+        
+        # Determine if it's a mind or body variant based on stat_type, defaulting to body
+        active_def_stat = dm_stat if (armor and getattr(armor, "stat_type", "") == dm_stat) else db_stat
+        def_stat_val = defender.stats.get(active_def_stat, 0)
+        
+        # Check active defense limit
+        if not defender.has_active_defended:
+            def_roll = random.randint(1, 20)
+            defender.has_active_defended = True
+            is_active_defense = True
+        else:
+            def_roll = 0 # Passive defense
+            is_active_defense = False
             
-        # Check Narrative Tags (Brutal vs Brittle)
-        if ("brutal" in intent.lower() or "brutal" in actor.tags) and "brittle" in target.tags:
-            return {
-                "action": intent,
-                "success": True,
-                "damage": 5,
-                "narrative_hint": f"[WEATHER: {weather}] [NARRATIVE BYPASS] The Brutal force instantly shatters the Brittle target without a roll."
-            }
-            
-        roll_1 = random.randint(1, 20)
-        roll_2 = random.randint(1, 20)
-        base_roll = min(roll_1, roll_2) if disadvantage else roll_1
-        
-        
-        # Check Chaos & Glitch (Chapter 6)
-        is_magic = "cast" in intent.lower() or "channel" in intent.lower()
-        is_finesse = "sneak" in intent.lower() or "finesse" in intent.lower()
-        is_skill_only = "pick" in intent.lower() or ("sneak" in intent.lower() and "attack" not in intent.lower())
-        
-        glitch_triggered = False
-        glitch_narrative = ""
-        
-        if is_magic or matched_skill:
-            ticks = chaos_state["ticks"]
-            c_num = chaos_state["number"]
-            margin = 0
-            if 4 <= ticks <= 6: margin = 1
-            elif ticks >= 7: margin = 2
-            
-            if abs(base_roll - c_num) <= margin:
-                glitch_triggered = True
-                chaos_state["ticks"] += 1
-                chaos_state["number"] = random.randint(1, 20)
-                
-                glitch_roll = random.randint(1, 6)
-                res = random.choice(WILD_RESONANCE_TABLE)
-                if glitch_roll <= 2:
-                    glitch_narrative = f"[GLITCH! Full Hijack] {res} (Target Random)"
-                elif glitch_roll <= 4:
-                    glitch_narrative = f"[GLITCH! Targeted Hijack] {res}"
-                else:
-                    glitch_narrative = f"[GLITCH! Pure Luck] Reality stabilizes. (Chaos Ticks +1)"
+        def_total = def_roll + def_stat_val + armor_mod
+
+        narrative = f"{attacker.name} attacks with {weapon_name} [{active_att_stat}] (Roll: {att_roll}+{att_stat_val}+{weapon_mod} = {att_total}). "
+        narrative += f"{defender.name} defends with {armor_name} [{active_def_stat}] ({'Active Roll: ' + str(def_roll) if is_active_defense else 'Passive'} + {def_stat_val}+{armor_mod} = {def_total})."
+
+        # 3. Resolution
+        if att_total == def_total:
+            if is_active_defense:
+                return {
+                    "action": intent,
+                    "is_clash": True,
+                    "clash_target": defender.name,
+                    "narrative_hint": narrative + " BLADES LOCK! A Clash is triggered! Declare your tactic (Press, Maneuver, Feint, Disengage)."
+                }
             else:
-                # Still ticks up if eligible action is used
-                chaos_state["ticks"] += 1
-                chaos_state["number"] = random.randint(1, 20)
-                
-        # Channeling the Chaos (0 tokens)
-        channeling = False
-        if is_magic and actor.active_focus <= 0:
-            channeling = True
-            chaos_die = random.randint(1, 20)
-            c_num = chaos_state["number"]
-            if chaos_die == c_num:
-                glitch_narrative += " [CHANNELING: Perfect Flow! Double Effect. +1 Tick]"
-                chaos_state["ticks"] += 1
-            elif abs(chaos_die - c_num) <= 5:
-                res = random.choice(WILD_RESONANCE_TABLE)
-                glitch_narrative += f" [CHANNELING: Volatile. {res} +1 Tick]"
-                chaos_state["ticks"] += 1
-            else:
-                res = random.choice(WILD_RESONANCE_TABLE)
-                glitch_narrative += f" [CHANNELING: Rejected! Action fails. {res} (Targets Self). +2 Ticks]"
-                chaos_state["ticks"] += 2
-                # Force failure early
                 return {
                     "action": intent,
                     "success": False,
                     "is_clash": False,
-                    "damage": 0,
-                    "chaos_state": chaos_state,
-                    "narrative_hint": f"[WEATHER: {weather}] {glitch_narrative}"
+                    "narrative_hint": narrative + " The passive defense holds. Glancing blow, no damage."
                 }
-        
-        if matched_skill:
-            # Execute Functional Skill
-            cost = matched_skill.get("cost", {})
-            if cost and not channeling:
-                actor.apply_action_cost(cost)
-            
-            logs = execute_effects(actor, target, matched_skill, self)
-            
+                
+        elif att_total > def_total:
+            threshold = att_total - def_total
+            if threshold <= 4:
+                dmg = 1
+                outcome = "Minor injury / Glancing blow."
+            elif threshold <= 9:
+                dmg = 3
+                outcome = "Major injury! Solid strike."
+            else:
+                dmg = 5
+                outcome = "CRITICAL HIT! Devastating blow."
+                
+            defender.take_damage(dmg)
             return {
                 "action": intent,
                 "success": True,
                 "is_clash": False,
-                "damage": 0,
-                "chaos_state": chaos_state,
-                "narrative_hint": f"[WEATHER: {weather}] {glitch_narrative} | " + " | ".join(logs)
+                "damage": dmg,
+                "narrative_hint": narrative + f" {outcome} ({dmg} damage)"
             }
-            
-        if is_magic:
-            if not channeling: actor.apply_action_cost({"focus": 2})
-            actor_roll = base_roll + actor.get_stat("logic")
-            target_defense = 10 + target.get_stat("willpower")
-        elif is_skill_only:
-            actor_roll = base_roll + actor.get_stat("finesse")
-            target_defense = 12 # Static DC for simple skills
         else:
-            actor.apply_action_cost({"stamina": 1})
-            
-            weapon = actor.inventory.slots.get("weapon")
-            stat_used = weapon.stat_type if weapon else "might"
-            
-            if is_finesse and stat_used != "finesse" and not disadvantage:
-                base_roll = max(roll_1, roll_2)
-                
-            actor_roll = base_roll + actor.get_stat(stat_used)
-            
-            armor = target.inventory.slots.get("body")
-            defense_stat = armor.stat_type if armor else "reflexes"
-            
-            target_defense = 10 + target.get_stat(defense_stat)
-            
-            if "prone" in target.tags: target_defense -= 2
-            if "exposed" in target.tags: target_defense -= 4
-        
-        is_clash = (actor_roll == target_defense) and not is_skill_only
-        success = actor_roll > target_defense
-        
-        result = {
-            "action": intent,
-            "success": success,
-            "is_clash": is_clash,
-            "damage": 0,
-            "chaos_state": chaos_state,
-            "narrative_hint": ""
-        }
-        
-        # Build narrative hint context
-        env_context = f"[WEATHER: {weather} | TAGS: {', '.join(global_tags)}] " if global_tags else f"[WEATHER: {weather}] "
-        if glitch_narrative:
-            env_context += glitch_narrative + " | "
-        
-        if is_clash:
-            # 3-Beat Pulse Clash Drain
-            actor.apply_action_cost({"stamina": 1, "focus": 1})
-            target.apply_action_cost({"stamina": 1, "focus": 1})
-            result["narrative_hint"] = env_context + f"[CLASH] Both {actor.name} and {target.name} burn 1 Focus and 1 Stamina in a deadlock."
-        elif success:
-            base_damage = actor_roll - target_defense
-            # Stage 1: Armor Mitigation
-            armor_mod = 0
-            if target.inventory.slots.get("physical_armor"):
-                armor_mod = target.inventory.slots.get("physical_armor").armor_mod
-            elif target.inventory.slots.get("body"): # Legacy fallback
-                armor_mod = target.inventory.slots.get("body").armor_mod
-                
-            damage = max(1, base_damage - armor_mod)
-            result["damage"] = damage
-            target.take_damage(damage)
-            
-            # Stage 2 & 3: The Trauma Pipeline
-            if damage >= 11:
-                target.injury_tallies.extend([random.randint(1, 4), random.randint(1, 4)])
-                target.active_bleed = True
-                narrative = f"[CRITICAL INJURY] {damage} Damage! (Armor absorbed {armor_mod}). {target.name}'s anatomy fails. They take 2 injury tallies and begin bleeding profusely!"
-            elif damage >= 6:
-                target.has_disadvantage = True
-                target.injury_tallies.append(random.randint(1, 4))
-                target.active_bleed = True
-                narrative = f"[MAJOR INJURY] {damage} Damage! (Armor absorbed {armor_mod}). The brutal strike triggers Adrenaline Shock, adds an injury tally, and causes Bleeding!"
-            elif damage >= 3:
-                target.has_disadvantage = True
-                target.injury_tallies.append(random.randint(1, 4))
-                narrative = f"[ADRENALINE SHOCK] {damage} Damage. (Armor absorbed {armor_mod}). The impact staggers {target.name}, marking an injury tally and forcing Disadvantage."
+            threshold = def_total - att_total
+            if threshold >= 10:
+                outcome = "FUMBLE! The attacker leaves themselves completely open."
+                attacker.has_disadvantage = True
             else:
-                narrative = f"A glancing blow on {target.name} for {damage} damage. (Armor absorbed {armor_mod}). The chassis holds firm."
-                
-            result["narrative_hint"] = env_context + narrative
-        else:
-            reason = "through the lingering effects of Adrenaline Shock" if disadvantage else "completely"
-            result["narrative_hint"] = env_context + f"{actor.name}'s attack misses {reason}."
+                outcome = "Miss. The defender easily deflects or evades."
             
-        # Wild Resonance
-        if base_roll == 20:
-            resonance = random.choice(WILD_RESONANCE_TABLE)
-            result["narrative_hint"] += f" [WILD RESONANCE TRIGGERED - NATURAL 20] {resonance}"
-            
-        return result
+            return {
+                "action": intent,
+                "success": False,
+                "is_clash": False,
+                "damage": 0,
+                "narrative_hint": narrative + f" {outcome}"
+            }
 
-    def resolve_clash(self, actor_name: str, target_name: str, actor_tactic: str, target_tactic: str) -> dict:
-        """Resolves a deadlocked clash using the 4-Step Matrix."""
-        actor = self.entities.get(actor_name)
-        target = self.entities.get(target_name)
+    def resolve_clash_tactic(self, player_tactic: str, ai_tactic: str) -> dict:
+        """Resolves the 4-way RPS matrix for a clash."""
+        p_tactic = player_tactic.lower().strip()
+        a_tactic = ai_tactic.lower().strip()
         
-        if not actor or not target:
-            return {"success": False, "narrative_hint": "Error: Clash entity missing."}
+        if p_tactic not in CLASH_MATRIX or a_tactic not in CLASH_MATRIX:
+            return {"error": "Invalid tactics."}
             
-        # Clash Drain: 1 Stamina, 1 Focus
-        actor.apply_action_cost({"stamina": 1, "focus": 1})
-        target.apply_action_cost({"stamina": 1, "focus": 1})
-        
-        a_tac = CLASH_MATRIX.get(actor_tactic.lower())
-        t_tac = CLASH_MATRIX.get(target_tactic.lower())
-        
-        if not a_tac or not t_tac:
-            return {"success": False, "narrative_hint": "Invalid clash tactic selected."}
+        outcome = CLASH_MATRIX[p_tactic][a_tactic]
+        return {
+            "narrative_hint": f"Player used {p_tactic}, Enemy used {a_tactic}. {outcome}",
+            "is_clash": False # Ends the clash
+        }
+
+    def get_social_attack_stats(self, augment_name: str) -> str:
+        """Returns the mind stat used for the social augment."""
+        name = augment_name.lower()
+        if "toxin" in name or "trophy" in name or "spore" in name: return "knowledge" # Disgust
+        if "mirror" in name or "whistle" in name or "paradox" in name: return "logic" # Confusion
+        if "powder" in name or "flute" in name or "ricochet" in name: return "awareness" # Distraction
+        if "token" in name or "omen" in name or "curse" in name: return "intuition" # Self-Doubt
+        if "mask" in name or "incense" in name or "radiant" in name: return "charm" # Awe
+        if "execution" in name or "aura" in name or "judgment" in name: return "willpower" # Intimidation
+        return "charm" # Fallback
+
+    def resolve_social_attack(self, attacker_name: str, defender_name: str, intent: str, augment_name: str) -> dict:
+        """Resolves Composure damage against Mental Defense."""
+        attacker = self.entities.get(attacker_name)
+        defender = self.entities.get(defender_name)
+
+        if not attacker or not defender:
+            return {"action": intent, "success": False, "narrative_hint": "Combatants not found."}
             
-        a_stat = actor.get_stat(a_tac["physical_stat"])
-        t_stat = target.get_stat(t_tac["physical_stat"])
+        att_stat = self.get_social_attack_stats(augment_name)
+        att_val = attacker.stats.get(att_stat, 0)
+        att_roll = random.randint(1, 20)
+        att_total = att_roll + att_val
         
-        a_roll = random.randint(1, 20) + a_stat
-        t_roll = random.randint(1, 20) + t_stat
+        def_total = defender.get_derived_stat("mental defense") + random.randint(1, 20)
         
-        result = {"is_clash": False, "action": f"Clash: {actor_tactic} vs {target_tactic}"}
+        narrative = f"{attacker.name} uses {augment_name} [{att_stat}] (Roll: {att_roll}+{att_val} = {att_total}). "
+        narrative += f"{defender.name} resists with Mental Defense (Roll + {defender.get_derived_stat('mental defense')} = {def_total})."
         
-        if a_roll > t_roll:
-            result["success"] = True
-            damage = max(1, a_roll - t_roll)
-            target.take_damage(damage)
-            narrative = f"{actor.name} wins the clash! {a_tac['delivery']} {target.name} {t_tac['vulnerability']} ({damage} Damage)."
-        elif t_roll > a_roll:
-            result["success"] = False
-            damage = max(1, t_roll - a_roll)
-            actor.take_damage(damage)
-            narrative = f"{target.name} wins the clash! {t_tac['delivery']} {actor.name} {a_tac['vulnerability']} ({damage} Damage)."
+        if att_total > def_total:
+            threshold = att_total - def_total
+            if threshold <= 4:
+                dmg = 1
+                outcome = "Minor psychological distress."
+            elif threshold <= 9:
+                dmg = 3
+                outcome = "Major psychological shock!"
+            else:
+                dmg = 5
+                outcome = "CRITICAL PSYCHOLOGICAL BREAK!"
+                
+            defender.take_damage(dmg, is_composure=True)
+            return {
+                "action": intent,
+                "success": True,
+                "damage": dmg,
+                "narrative_hint": narrative + f" {outcome} ({dmg} Composure damage)"
+            }
         else:
-            result["is_clash"] = True
-            narrative = f"The clash continues! Weapons remain locked."
-            
-        result["narrative_hint"] = f"[CLASH RESOLUTION] {narrative}"
-        return result
+            return {
+                "action": intent,
+                "success": False,
+                "damage": 0,
+                "narrative_hint": narrative + " The defender anchors their mind and ignores the assault."
+            }
