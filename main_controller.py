@@ -192,7 +192,8 @@ class SagaController:
             "px": self.player_px,
             "py": self.player_py,
             "cx": self.player_cx,
-            "cy": self.player_cy
+            "cy": self.player_cy,
+            "player_skills": self.player.skills if self.player else []
         })
 
     def _update_hud(self):
@@ -226,16 +227,37 @@ class SagaController:
         self.bus.subscribe("PLAYER_ACTION", self.handle_player_action)
         self.bus.subscribe("UI_FINALIZE_PARTY", self._finalize_party_and_start)
         self.bus.subscribe("UI_LOAD_GAME", lambda p: self.load_state())
-        
         self.bus.subscribe("UI_CHARACTER_REST", self._handle_character_rest)
+        self.bus.subscribe("VENDOR_BUY_ITEM", self._handle_buy_item)
         self.bus.subscribe("UI_CHARACTER_UPGRADE_STAT", self._handle_upgrade_stat)
-        
         self.bus.subscribe("UI_INVENTORY_EQUIP", self._handle_inventory_equip)
         self.bus.subscribe("UI_INVENTORY_UNEQUIP", self._handle_inventory_unequip)
-        
         self.bus.subscribe("UI_TOGGLE_STEALTH", self._handle_toggle_stealth)
         self.bus.subscribe("UI_LONG_REST", self._handle_long_rest)
         self.bus.subscribe("PLAYER_ACTION_UI_INJECT", self._handle_injected_action)
+        
+    def _handle_buy_item(self, payload):
+        item_name = payload.get("item_name")
+        if not hasattr(self, "current_vendor_items") or not item_name: return
+        
+        for item in self.current_vendor_items:
+            if item["name"].lower() == item_name.lower():
+                if self.player.inventory.gold >= item["cost"]:
+                    self.player.inventory.gold -= item["cost"]
+                    from rules_engine.inventory import Item
+                    new_item = Item(item["name"], "misc", "none", 0, 1) # simple mapping
+                    self.player.inventory.bag.append(new_item)
+                    self.bus.publish("SYSTEM_LOG", f"Bought {item['name']} for {item['cost']} Gold.")
+                    self.bus.publish("VENDOR_DATA_UPDATE", {
+                        "vendor_name": getattr(self, "current_vendor_name", "Vendor"),
+                        "player_gold": self.player.inventory.gold,
+                        "items": self.current_vendor_items
+                    })
+                    self._update_hud()
+                else:
+                    self.bus.publish("SYSTEM_LOG", f"Not enough Gold to buy {item['name']}.")
+                return
+        self.bus.publish("SYSTEM_LOG", f"Vendor does not sell '{item_name}'.")
         
     def _handle_injected_action(self, payload):
         intent = payload.get("intent", "")
@@ -511,6 +533,10 @@ class SagaController:
         if matched_target:
             target = matched_target
             
+        if "trade with" in intent_raw.lower():
+            self._handle_vendor_trade(target)
+            return
+            
         weather_state = self.current_battlemap.get('weather', 'Clear')
         weather_tags = self.current_battlemap.get('global_tags', [])
             
@@ -624,12 +650,65 @@ class SagaController:
                         
                 if ai_narratives:
                     mechanical_result["narrative_hint"] += "\n[ENEMY TURNS]:\n" + "\n".join(ai_narratives)
+                    
+            # Task 1: Loot Drops
+            loot_messages = []
+            import random
+            for ent_name, sheet in self.rules.entities.items():
+                if ent_name != "Player" and sheet.current_hp <= 0 and not sheet.looted:
+                    sheet.looted = True
+                    gold_drop = random.randint(10, 50) + (self.player.level * 5)
+                    self.player.inventory.gold += gold_drop
+                    loot_messages.append(f"Looted {gold_drop} Gold from {ent_name}.")
+                    
+            if loot_messages:
+                mech_str = "\n".join(loot_messages)
+                self.bus.publish("SYSTEM_LOG", mech_str)
+                mechanical_result["narrative_hint"] += "\n" + mech_str
             
         self.story.log_beat(intent_raw, str(mechanical_result))
         self._update_hud()
         
         prompt = self.ai.generate_llm_prompt(str(mechanical_result), lore + explicit_hook_directive + personality_context)
         self.bus.publish("NARRATIVE_OUTPUT", {"response": prompt})
+
+    def _handle_vendor_trade(self, vendor_name: str):
+        self.bus.publish("SYSTEM_LOG", f"Generating dynamic vendor inventory for {vendor_name}...")
+        
+        biome = self.current_battlemap.get('biome', 'Unknown Terrain')
+        lore = self.lore.get_context_for_location(vendor_name)
+        
+        prompt = f"The player wants to trade with a vendor named {vendor_name} in {biome}. Based on this lore: {lore}. Generate exactly 3 unique items for sale. Return ONLY valid JSON in this exact format, with no markdown formatting or backticks: [{{ \"name\": \"Item Name\", \"cost\": 50, \"desc\": \"What it does\" }}]. The cost MUST be between 10 and 150 Gold."
+        
+        response = self.ai.generate_llm_prompt(prompt, "You are a JSON data generator. Do NOT use markdown. Do NOT wrap in ```json.")
+        
+        import json
+        try:
+            items = json.loads(response.strip().replace("```json", "").replace("```", ""))
+            # Task 2: Economic Guardrails
+            for item in items:
+                if "cost" in item:
+                    try:
+                        cost = int(item["cost"])
+                        item["cost"] = max(10, min(150, cost))
+                    except ValueError:
+                        item["cost"] = 50
+        except json.JSONDecodeError:
+            self.bus.publish("SYSTEM_LOG", f"Failed to parse AI JSON for Vendor. Generating fallback items.")
+            items = [
+                {"name": "Health Salve", "cost": 25, "desc": "Restores 10 HP."},
+                {"name": "Stamina Brew", "cost": 15, "desc": "Restores full stamina."},
+                {"name": "Focus Crystal", "cost": 40, "desc": "Restores full focus."}
+            ]
+            
+        self.current_vendor_items = items
+        self.current_vendor_name = vendor_name
+        self.bus.publish("UI_OPEN_VENDOR", {})
+        self.bus.publish("VENDOR_DATA_UPDATE", {
+            "vendor_name": vendor_name,
+            "player_gold": self.player.inventory.gold,
+            "items": items
+        })
 
     def save_state(self, filepath: str = "saves/quicksave.json"):
         import os

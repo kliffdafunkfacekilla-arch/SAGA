@@ -39,6 +39,7 @@ class CharacterSheet:
         self.active_bleed = False
         self.active_trauma = False
         self.is_zero_state = False
+        self.looted = False
         
         # Functional State
         self.tags = set()

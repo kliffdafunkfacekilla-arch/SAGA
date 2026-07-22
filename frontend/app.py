@@ -130,8 +130,36 @@ class BattleMapCanvas(QGraphicsView):
                 menu.addAction(f"Interact with {name}", lambda: self._send_intent(f"interact with {name}"))
                 menu.addAction(f"Examine {name}", lambda: self._send_intent(f"examine {name}"))
                 menu.addAction(f"Pickup {name}", lambda: self._send_intent(f"pickup {name}"))
+            elif personality.lower() == "vendor":
+                menu.addAction(f"Trade with {name}", lambda: self._send_intent(f"trade with {name}"))
+                menu.addAction(f"Talk to {name}", lambda: self._send_intent(f"talk to {name}"))
+                menu.addAction(f"Examine {name}", lambda: self._send_intent(f"examine {name}"))
+                menu.addAction(f"Attack {name}", lambda: self._send_intent(f"attack {name}"))
             else:
                 menu.addAction(f"Attack {name}", lambda: self._send_intent(f"attack {name}"))
+                
+                # Active Skills UI (Phase 5)
+                from rules_engine.skills_data import PASSIVE_HARDWARE, SUBCONSCIOUS_MAGIC, ANOMALIES
+                skill_sources = [PASSIVE_HARDWARE.get("might", {}), SUBCONSCIOUS_MAGIC, ANOMALIES]
+                unlocked_tracks = getattr(self, "player_skills", [])
+                
+                skill_menu = menu.addMenu("Use Skill >")
+                has_skills = False
+                for source in skill_sources:
+                    for track, tiers in source.items():
+                        if track in unlocked_tracks:
+                            for t_level, skill_data in tiers.items():
+                                if skill_data.get("type") == "ACTIVE":
+                                    s_name = skill_data["name"]
+                                    c_stam = skill_data.get("cost", {}).get("stamina", 0)
+                                    c_foc = skill_data.get("cost", {}).get("focus", 0)
+                                    lbl = f"{s_name} [{c_stam}S {c_foc}F]"
+                                    # Create default argument for lambda capture
+                                    skill_menu.addAction(lbl, lambda s=s_name: self._send_intent(f"use {s} on {name}"))
+                                    has_skills = True
+                if not has_skills:
+                    skill_menu.setEnabled(False)
+
                 menu.addAction(f"Talk to {name}", lambda: self._send_intent(f"talk to {name}"))
                 menu.addAction(f"Examine {name}", lambda: self._send_intent(f"examine {name}"))
         else:
@@ -288,6 +316,7 @@ class MapCanvas(QWidget):
         cx = payload.get("cx", 0)
         cy = payload.get("cy", 0)
         self.title.setText(f"S.A.G.A. Engine VTT [Cluster {cx},{cy}] [Local {px},{py}]")
+        self.battle_map.player_skills = payload.get("player_skills", [])
         self.battle_map.load_matrix(battlemap_data, px, py)
         
     def _on_hud_update(self, payload):
@@ -345,8 +374,58 @@ class StartMenu(QWidget):
         
         self.setLayout(layout)
 
-
-
+class VendorScreen(QWidget):
+    def __init__(self, bus):
+        super().__init__()
+        self.bus = bus
+        self.layout = QVBoxLayout()
+        self.layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        self.title = QLabel("Vendor Shop")
+        self.title.setStyleSheet("font-size: 24px; font-weight: bold; color: gold;")
+        
+        self.gold_label = QLabel("Gold: 0")
+        self.gold_label.setStyleSheet("font-size: 18px; color: white;")
+        
+        self.item_list = QTextEdit()
+        self.item_list.setReadOnly(True)
+        self.item_list.setStyleSheet("background-color: #222; color: #ddd; font-family: monospace; font-size: 14px;")
+        self.item_list.setMinimumHeight(400)
+        
+        self.buy_input = QLineEdit()
+        self.buy_input.setPlaceholderText("Type item name to buy...")
+        self.buy_input.setStyleSheet("padding: 5px; font-size: 16px; background-color: #333; color: white; border: 1px solid #555;")
+        self.buy_input.returnPressed.connect(self._on_buy)
+        
+        btn_leave = QPushButton("Leave Shop")
+        btn_leave.setStyleSheet("padding: 10px; background-color: #552222; color: white;")
+        btn_leave.clicked.connect(lambda: self.bus.publish("UI_CLOSE_VENDOR"))
+        
+        self.layout.addWidget(self.title)
+        self.layout.addWidget(self.gold_label)
+        self.layout.addWidget(self.item_list)
+        self.layout.addWidget(self.buy_input)
+        self.layout.addWidget(btn_leave)
+        self.setLayout(self.layout)
+        
+        self.bus.subscribe("VENDOR_DATA_UPDATE", self._on_vendor_update)
+        
+    def _on_vendor_update(self, payload):
+        self.title.setText(f"Trading with: {payload.get('vendor_name', 'Merchant')}")
+        self.gold_label.setText(f"Gold: {payload.get('player_gold', 0)}")
+        
+        items = payload.get("items", [])
+        text = "Items for Sale:\n\n"
+        for i in items:
+            text += f"- {i['name']} ({i['cost']} Gold) : {i['desc']}\n"
+            
+        self.item_list.setText(text)
+        
+    def _on_buy(self):
+        item_name = self.buy_input.text().strip()
+        if item_name:
+            self.bus.publish("VENDOR_BUY_ITEM", {"item_name": item_name})
+            self.buy_input.clear()
 class SagaDesktopApp(QMainWindow):
     def __init__(self, bus):
         super().__init__()
@@ -361,11 +440,15 @@ class SagaDesktopApp(QMainWindow):
         self.char_creation = CharacterCreationScreen(bus)
         self.map_canvas = MapCanvas(bus)
         self.char_management = CharacterManagementScreen(bus)
+        self.vendor_screen = VendorScreen(bus)
         
         self.stack.addWidget(self.start_menu)      # 0
         self.stack.addWidget(self.char_creation)   # 1
         self.stack.addWidget(self.map_canvas)      # 2
         self.stack.addWidget(self.char_management) # 3
+        self.stack.addWidget(self.vendor_screen)   # 4
+        
+        self.setCentralWidget(self.stack)
         
         self.bus.subscribe("UI_START_NEW_GAME", lambda p: self.stack.setCurrentIndex(1))
         self.bus.subscribe("UI_LOAD_GAME", self._show_game)
@@ -373,6 +456,9 @@ class SagaDesktopApp(QMainWindow):
         
         self.bus.subscribe("UI_OPEN_CHAR_MANAGEMENT", lambda p: self.stack.setCurrentIndex(3))
         self.bus.subscribe("UI_CLOSE_CHAR_MANAGEMENT", lambda p: self.stack.setCurrentIndex(2))
+        
+        self.bus.subscribe("UI_OPEN_VENDOR", lambda p: self.stack.setCurrentIndex(4))
+        self.bus.subscribe("UI_CLOSE_VENDOR", lambda p: self.stack.setCurrentIndex(2))
         
     def _show_game(self, payload=None):
         self.stack.setCurrentIndex(2)
