@@ -1,0 +1,110 @@
+name: BetaTransitionPipeline_V3
+description: Sets project vision, audits alpha, researches web standards, restructures docs, and scaffolds beta.
+trigger: /run-skill BetaTransitionPipeline
+
+# ==========================================
+# AGENT DEFINITIONS
+# ==========================================
+agents:
+  - id: manager
+    name: The Project Manager
+    model: gemini-3.1-pro
+    role: "Project visionary and focus setter."
+    permissions:
+      - read_only: true
+      # You can link the specific skills here if the framework supports it:
+      # skills: ["software-engineering", "developer"]
+      
+  - id: auditor
+    name: The Auditor
+    model: gemini-3.1-pro
+    role: "Read-Only codebase and dependency analyzer."
+    permissions:
+      - read_only: true
+      
+  - id: researcher
+    name: The Project Researcher
+    model: gemini-3.1-pro
+    role: "External system analyst and web researcher."
+    permissions:
+      - read_only: true
+      - browse_web: true  # Grants access to search live documentation and repos
+    
+  - id: writer
+    name: The Technical Writer
+    model: gemini-3.1-pro
+    role: "Documentation reorganizer and spec generator."
+    permissions:
+      - write_files: ["docs/", "project_spec.md", "project_vision.md"]
+      
+  - id: architect
+    name: The Solutions Architect
+    model: gemini-3.1-pro
+    role: "System scaffold builder and task planner."
+    permissions:
+      - execute_terminal: true
+      - write_files: ["beta_roadmap.json", "beta_build/"]
+
+# ==========================================
+# SEQUENTIAL EXECUTION STEPS
+# ==========================================
+steps:
+  - step: 1
+    name: The Vision Setting
+    agent: manager
+    prompt: >
+      Review the project as a whole. Define the overarching vision, primary goals, and the core focus of the project. 
+      Ensure this vision serves as the North Star for all subsequent steps. If available, utilize developer and software engineering skills/prompts to structure this effectively.
+      Output a high-level project_vision.md detailing the final outcome we are targeting.
+    artifacts_expected:
+      - project_vision.md
+
+  - step: 2
+    name: The Audit Pass
+    agent: auditor
+    depends_on: 1
+    prompt: >
+      Read project_vision.md to understand the target. Then, analyze the current alpha codebase in the /src directory and the scattered notes in /docs/research. 
+      Map out all dependencies, tech debt, sloppy prototype code, and structural bottlenecks relative to our new goals. 
+      Generate a comprehensive report named alpha_audit_report.md detailing the current state of the architecture.
+    artifacts_expected:
+      - alpha_audit_report.md
+
+  - step: 3
+    name: Market & Standard Research
+    agent: researcher
+    depends_on: 2
+    prompt: >
+      Read project_vision.md and alpha_audit_report.md. Based on the project's vision and current tech stack, search the live web 
+      for modern best practices, optimal folder structures, and similar open-source projects. 
+      Identify specific libraries or architectural patterns that would improve the transition to beta. 
+      Output findings as external_best_practices.md.
+    artifacts_expected:
+      - external_best_practices.md
+
+  - step: 4
+    name: The Cleanup & Synthesis Pass
+    agent: writer
+    depends_on: [2, 3] # Waits for both the audit and the research to finish
+    prompt: >
+      Read project_vision.md, alpha_audit_report.md, and external_best_practices.md. 
+      Reorganize the existing research documents to reflect the current reality of the project, 
+      integrating the new external best practices and ensuring alignment with the project vision. 
+      Consolidate everything into a clean, unified project_spec.md.
+    artifacts_expected:
+      - project_spec.md
+    # Forces the workflow to pause here so you can manually review the new spec before code is written.
+    require_approval: true
+
+  - step: 5
+    name: The Beta Blueprint
+    agent: architect
+    depends_on: 4
+    prompt: >
+      Analyze the approved project_spec.md against production best practices and the original vision. 
+      Generate a beta_roadmap.json containing actionable coding tasks. 
+      Automatically scaffold out the new, clean folder structure for the beta build inside a new directory called /beta_build. 
+      Do not modify or delete the original alpha source code.
+    artifacts_expected:
+      - beta_roadmap.json
+      - /beta_build directory scaffold

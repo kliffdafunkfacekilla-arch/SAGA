@@ -12,8 +12,7 @@ class AIDirector:
     Provides compatible ``parse_intent``, ``generate_llm_prompt``, and Reactive Seed generation.
     Expects a ``models`` folder with a ``*.gguf`` file.
     """
-
-    def __init__(self, model_path: str | os.PathLike = None):
+    def __init__(self, model_path: str | os.PathLike = None, load_model: bool = True):
         default_dir = Path(__file__).resolve().parents[1] / "models"
         if model_path is None:
             candidates = list(default_dir.glob("*.gguf"))
@@ -26,26 +25,29 @@ class AIDirector:
         if not self.model_path.is_file():
             raise FileNotFoundError(f"Model file not found: {self.model_path}")
 
-        try:
-            self._llama = Llama(
-            model_path=str(self.model_path),
-            n_ctx=4096,
-            n_threads=2,
-            n_gpu_layers=-1,
-            verbose=True,
-        )
-        except Exception as e:
-            import traceback
-            error_details = traceback.format_exc()
-            with open("llama_error_log.txt", "w") as f:
-                f.write(f"FAILED TO INIT LLAMA:\n{error_details}")
-            print(f"\n\n[CRITICAL ERROR IN LLAMA INIT]: {e}")
-            
-            # Fallback to a dummy no-op Llama implementation to prevent crash
-            class _DummyLlama:
-                def __call__(self, *args, **kwargs):
-                    return {"choices": [{"text": "[Model failed to initialize]"}]}
-            self._llama = _DummyLlama()
+        if load_model:
+            try:
+                self._llama = Llama(
+                model_path=str(self.model_path),
+                n_ctx=4096,
+                n_threads=2,
+                n_gpu_layers=0,  # Disabled GPU offloading to prevent access violation crashes
+                verbose=True,
+            )
+            except Exception as e:
+                import traceback
+                error_details = traceback.format_exc()
+                with open("llama_error_log.txt", "w") as f:
+                    f.write(f"FAILED TO INIT LLAMA:\n{error_details}")
+                print(f"\n\n[CRITICAL ERROR IN LLAMA INIT]: {e}")
+                
+                # Fallback to a dummy no-op Llama implementation to prevent crash
+                class _DummyLlama:
+                    def __call__(self, *args, **kwargs):
+                        return {"choices": [{"text": "[Model failed to initialize]"}]}
+                self._llama = _DummyLlama()
+        else:
+            self._llama = None
             
         self.system_prompt = (
             "SYSTEM DIRECTIVE: You are the autonomous Game Director and Narrative Engine for Project S.A.G.A., "
