@@ -1,0 +1,5 @@
+# Ignore large model files
+*.gguf
+models/
+__pycache__/
+*.pyc
