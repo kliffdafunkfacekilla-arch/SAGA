@@ -81,6 +81,16 @@ class QuestWeaver:
         self.journal = QuestJournal()
         self.beat_history = []
         
+        self.current_act = 0 # 0 = Tutorial/Prologue, 1 = Act 1
+        self.current_slot = 0
+        self.active_hook = "Escape the burning carriage."
+        
+        self.act_blueprints = {
+            1: {"max_slots": 3, "finale_type": "boss_ambush"},
+            2: {"max_slots": 5, "finale_type": "siege"},
+            3: {"max_slots": 4, "finale_type": "grand_finale"}
+        }
+        
         self.campaign_themes = [
             {"type": "The Warlord", "base_objective": "Dismantle the local Warlord's grip on the region."},
             {"type": "The Artifact", "base_objective": "Track down rumors of a pre-Sundering artifact."},
@@ -109,6 +119,70 @@ class QuestWeaver:
         self.beat_history.append({"action": action, "outcome": outcome})
         if len(self.beat_history) > 10:
             self.beat_history.pop(0)
+
+    def trigger_act_one(self, starting_cell_id: str, db):
+        print("QuestWeaver: Prologue complete. Initializing Act 1...")
+        
+        # 1. Update internal state
+        self.current_act = 1
+        self.current_slot = 1
+        
+        # 2. Pull the new region's lore to ground the hook
+        cell_data = db.get_cell_data(starting_cell_id) if db else {}
+        region_lore = cell_data.get("lore_snippet", "a barren wilderness.")
+        faction_control = cell_data.get("faction", "unknown forces")
+        
+        # 3. Generate the overarching Act 1 goal, flavored by the local database
+        self.active_hook = (
+            f"You survived the carriage fire. You are now hunted by the Baron. "
+            f"You have stumbled into territory controlled by {faction_control}. "
+            f"Local rumors say {region_lore}. Find a safe haven and investigate the Baron's motives."
+        )
+        return self.active_hook
+        
+    def advance_story(self, cleared_cell_id, db, seed_resolved=True):
+        if self.current_act == 0:
+            return
+
+        act_data = self.act_blueprints.get(self.current_act)
+        if not act_data:
+            return
+            
+        if seed_resolved:
+            self.current_slot += 1
+            print(f"Story Progressed: Act {self.current_act} - Slot {self.current_slot}/{act_data['max_slots']}")
+
+        if self.current_slot >= act_data['max_slots']:
+            self._trigger_act_finale(act_data['finale_type'])
+        else:
+            self._evolve_hook(cleared_cell_id, db)
+
+    def _evolve_hook(self, last_cell_id, db):
+        if not db:
+            return
+            
+        # Example dynamic progression
+        if self.current_slot == 1:
+            self.active_hook = f"You found clues about the Baron's hunt in this region. The trail leads deeper. Find the informant."
+        elif self.current_slot == 2:
+            self.active_hook = f"The informant is dead, but they pointed you to the Baron's outpost. Infiltrate it."
+
+    def _trigger_act_finale(self, finale_type):
+        print(f"CRITICAL: Act {self.current_act} Finale Triggered!")
+        self.active_hook = "ACT FINALE: The Baron's forces have cornered you. Survive the ambush to escape."
+        
+    def get_act_status(self):
+        if self.current_act > 0:
+            max_slots = self.act_blueprints[self.current_act]['max_slots']
+        else:
+            max_slots = 1
+            
+        return {
+            "act": self.current_act,
+            "current_slot": self.current_slot,
+            "max_slots": max_slots,
+            "objective": self.active_hook
+        }
 
     def initialize_campaign(self, current_cx: int, current_cy: int):
         if not self.journal.active_quests:

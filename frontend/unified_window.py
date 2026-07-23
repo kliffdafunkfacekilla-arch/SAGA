@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (QMainWindow, QStackedWidget, QWidget, QVBoxLayout,
                              QCheckBox, QGroupBox, QTextEdit, QDialog, QGridLayout)
 from PyQt6.QtCore import Qt
 from frontend.char_creation import CharacterCreationScreen
-from frontend.app import SceneViewer
+from frontend.app import MapCanvas
 from frontend.dm_dashboard import DMDashboard
 from rules_engine.character_sheet import CharacterSheet
 from rules_engine.inventory import Item
@@ -153,13 +153,13 @@ class SagaApplicationWindow(QMainWindow):
         self.stack.addWidget(self.char_creation_wrapper)
         
         # Index 2: Scene Viewer
-        self.scene_viewer = SceneViewer()
+        self.scene_viewer = MapCanvas(self.bus)  # Pass the event bus to the map canvas
         self.stack.addWidget(self.scene_viewer)
         
         self.stack.setCurrentIndex(0)
         
-        # Connect DM Dashboard to SceneViewer's signal
-        self.scene_viewer.state_updated.connect(self._on_state_updated)
+        # unified_window doesn't strictly need to connect this if it uses EventBus
+        # self.scene_viewer.state_updated.connect(self._on_state_updated)
 
     def _on_state_updated(self, tags: dict):
         if "dm_data" in tags:
@@ -206,7 +206,11 @@ class SagaApplicationWindow(QMainWindow):
 
     def start_game(self, is_new=True):
         # 1. Start background voice thread
-        self.voice_thread = threading.Thread(target=run_voice_engine, args=(self.scene_viewer.state_updated.emit,), daemon=True)
+        self.voice_thread = threading.Thread(
+            target=run_voice_engine, 
+            args=(lambda payload: self.bus.publish("HUD_UPDATE", payload),), 
+            daemon=True
+        )
         self.voice_thread.start()
         
         # 2. Switch to Scene Viewer

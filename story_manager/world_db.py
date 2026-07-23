@@ -42,6 +42,21 @@ class WorldDB:
                 )
             ''')
             
+            # Rigid Campaign Slots (The Script)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS campaign_slots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    act INTEGER,
+                    step_number INTEGER,
+                    slot_type TEXT,
+                    status TEXT DEFAULT 'Pending',
+                    active_seed_id TEXT,
+                    scenes_passed INTEGER DEFAULT 0,
+                    max_scenes INTEGER DEFAULT 3,
+                    scene_script TEXT
+                )
+            ''')
+            
             # Initialize Act 1 if not exists
             cursor.execute('INSERT OR IGNORE INTO campaign_state (id, current_act) VALUES (1, 1)')
             

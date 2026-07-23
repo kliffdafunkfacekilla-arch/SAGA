@@ -1,106 +1,71 @@
 # rules_engine/skills_data.py
 
-# The Passive Hardware (Assault & Aegis)
-# Refactored for the Functional Effects Engine
+# Redesigned for the ECS Tag System and Zonal Map
+# Skills now act as Delivery Systems for Tags and Zone Manipulators.
+
 PASSIVE_HARDWARE = {
-    "might": {
-        "Assault": {
-            "T1": {
-                "name": "Drive Back",
-                "type": "ACTIVE",
-                "cost": {"stamina": 1},
-                "effects": [
-                    {"type": "DAMAGE", "base": "might", "tags": ["impact", "brutal"]},
-                    {"type": "MOVE", "target": "enemy", "distance": 1}
-                ]
-            },
-            "T2": {
-                "name": "-1 S-Die",
-                "type": "PASSIVE",
-                "effects": [
-                    {"type": "MODIFY_RULE", "rule": "stamina_cost", "value": -1}
-                ]
-            },
-            "T3": {
-                "name": "Cleave",
-                "type": "ACTIVE",
-                "cost": {"stamina": 1},
-                "effects": [
-                    {"type": "DAMAGE", "base": "might", "tags": ["slashing"]},
-                    {"type": "APPLY_TAG", "target": "enemy", "tag": "bleeding"}
-                ]
-            },
-            "T7": {
-                "name": "Broken Armor",
-                "type": "ACTIVE",
-                "cost": {"stamina": 2},
-                "effects": [
-                    {"type": "APPLY_TAG", "target": "enemy", "tag": "exposed"}
-                ]
-            }
+    "Assault": {
+        "T1": {
+            "name": "Drive Back",
+            "type": "ACTIVE",
+            "cost": {"stamina": 1},
+            "range": "Melee",
+            "tags": ["impact", "force"]
+        },
+        "T3": {
+            "name": "Cleave",
+            "type": "ACTIVE",
+            "cost": {"stamina": 2},
+            "range": "Melee",
+            "tags": ["slashing", "brutal"]
         }
     }
 }
 
-# Subconscious Magic (Active Martial Tactics)
 SUBCONSCIOUS_MAGIC = {
     "The Wrangler": {
         "T1": {
-            "name": "The Basic (Grapple/Throw)",
-            "type": "ACTIVE",
-            "cost": {"stamina": 1, "focus": 1},
-            "effects": [
-                {"type": "APPLY_TAG", "target": "enemy", "tag": "grappled"},
-                {"type": "MOVE", "target": "enemy", "distance": 1},
-                {"type": "DAMAGE", "base": "might", "tags": ["impact"]}
-            ]
-        },
-        "T9": {
             "name": "Orbital Drop",
             "type": "ACTIVE",
-            "cost": {"stamina": 5, "focus": 5},
-            "effects": [
-                {"type": "DAMAGE", "base": "might", "tags": ["impact", "brutal", "lethal"]},
-                {"type": "APPLY_TAG", "target": "enemy", "tag": "prone"}
-            ]
+            "cost": {"stamina": 3, "focus": 2},
+            "range": "Melee",
+            "tags": ["impact", "force", "brutal"]
         }
     },
-    "The Sponge": {
+    "The Spark": {
         "T1": {
-            "name": "Brace",
+            "name": "Thunderstep",
             "type": "ACTIVE",
-            "cost": {"stamina": 1, "focus": 1},
-            "effects": [
-                {"type": "APPLY_TAG", "target": "self", "tag": "braced"},
-                {"type": "MODIFY_RULE", "rule": "defense_bonus", "value": 4}
-            ]
+            "cost": {"stamina": 1, "focus": 2},
+            "range": "Far",
+            "tags": ["shock", "force"],
+            "zone_shift": "Melee" # Instantly moves the actor to Melee
         }
     }
 }
 
-# The Anomalies
 ANOMALIES = {
-    "Mass": {
-        "T1": {
-            "name": "Rooted (P1) + Slowed (K1)",
-            "type": "ACTIVE",
-            "cost": {"stamina": 2, "focus": 2},
-            "effects": [
-                {"type": "APPLY_TAG", "target": "enemy", "tag": "slowed"},
-                {"type": "APPLY_TAG", "target": "self", "tag": "rooted"}
-            ]
-        }
-    },
     "Nexus": {
         "T1": {
-            "name": "Thermal Plating (P1) + Burn (K1)",
+            "name": "Frost Nova",
             "type": "ACTIVE",
-            "cost": {"stamina": 2, "focus": 2},
-            "effects": [
-                {"type": "APPLY_TAG", "target": "self", "tag": "thermal_plating"},
-                {"type": "APPLY_TAG", "target": "enemy", "tag": "fire"},
-                {"type": "DAMAGE", "base": "knowledge", "tags": ["fire"]}
-            ]
+            "cost": {"stamina": 1, "focus": 3},
+            "range": "Melee",
+            "tags": ["frost"] # Hits everything in the zone
+        },
+        "T2": {
+            "name": "Venom Spit",
+            "type": "ACTIVE",
+            "cost": {"stamina": 1, "focus": 1},
+            "range": "Close",
+            "tags": ["poison", "liquid"]
+        },
+        "T3": {
+            "name": "Chain Lightning",
+            "type": "ACTIVE",
+            "cost": {"stamina": 2, "focus": 4},
+            "range": "Close",
+            "tags": ["shock", "force"]
         }
     }
 }

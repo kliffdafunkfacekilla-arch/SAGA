@@ -26,8 +26,10 @@ class AssetMapper:
         full_path = os.path.join(self.base_dir, relative_path)
         if os.path.exists(full_path):
             return full_path
-        # Return a placeholder or just None if the asset is entirely missing
-        return None
+        print(f"[WARNING] AssetMapper could not find {full_path}. Using fallback.")
+        # Fallback to default biome if missing
+        fallback = os.path.join(self.base_dir, self.background_map["Default"])
+        return fallback if os.path.exists(fallback) else None
 
     def get_background(self, biome_tag: str) -> str:
         relative_path = self.background_map.get(biome_tag, self.background_map["Default"])

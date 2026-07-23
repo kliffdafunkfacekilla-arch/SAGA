@@ -1,7 +1,9 @@
 import time
 import json
 import random
+import sqlite3
 
+from core.event_bus import event_bus
 from ai_dm.director import AIDirector
 from rules_engine.character_sheet import CharacterSheet
 from rules_engine.anomaly_parser import AnomalyParser
@@ -12,13 +14,14 @@ from story_manager.campaign_weaver import CampaignWeaver
 from story_manager.reactive_seeds import SeedManager
 
 class VoiceEngine:
-    def __init__(self, ui_callback=None):
+    def __init__(self, ui_callback=None, rules_callback=None, player=None, ai_director=None):
         print("Initializing SAGA Voice Engine & The Nervous System...")
         self.ui_callback = ui_callback
-        self.ai = AIDirector()
+        self.rules_callback = rules_callback
+        self.ai = ai_director if ai_director else AIDirector()
         self.tts = TTSHandler()
         self.stt = STTHandler()
-        self.player = None
+        self.player = player
         
         # Phase 3 & 6 Integrations
         self.db = WorldDB("okasha_world.db")
@@ -50,8 +53,21 @@ class VoiceEngine:
             self.current_location_lore = (
                 f"You are in {self.current_location_name} (Cell {cell_data['id']}), a {cell_data['biome']} region. "
                 f"The weather is currently {cell_data.get('weather', 'mild')}. "
-                f"It is controlled by the {cell_data['faction']}."
             )
+            
+            faction_name = cell_data.get('faction', '')
+            if faction_name:
+                try:
+                    conn = sqlite3.connect("okasha_world.db")
+                    fac_row = conn.execute("SELECT form, culture FROM factions WHERE name LIKE ?", ('%' + faction_name + '%',)).fetchone()
+                    if fac_row:
+                        self.current_location_lore += f"It is controlled by {faction_name}, a {fac_row[0]} composed mostly of the {fac_row[1]} culture."
+                    else:
+                        self.current_location_lore += f"It is controlled by the {faction_name}."
+                    conn.close()
+                except Exception:
+                    self.current_location_lore += f"It is controlled by the {faction_name}."
+
             if cell_data["population"] > 0:
                 self.current_location_lore += f" There are {cell_data['population']} residents here."
             if cell_data["chaos"] > 1.0:
@@ -129,6 +145,7 @@ class VoiceEngine:
                 name = "Ael Thorne"
                 
             self.player = CharacterSheet(name)
+            self.player.biological_origin = "Drifter"
             self.player.stats = {
                 "might": 5, "endurance": 5, "finesse": 5, "reflexes": 5,
                 "vitality": 5, "fortitude": 5, "knowledge": 5, "logic": 5,
@@ -138,9 +155,14 @@ class VoiceEngine:
             self.tts.speak(f"Character created. Welcome, {self.player.name}.")
 
     def run_loop(self):
-        self.create_character()
-        
-        # Initial Scene narration using Campaign Spine and Burg Intro
+        # Allow passing player from the MainController (via character creation UI)
+        if self.player is None:
+            self.create_character()
+        else:
+            self.tts.speak(f"Character initialized. Welcome, {self.player.name}.")
+            
+        self.update_ui_state("World initializing...")
+        time.sleep(2.0)
         self._narrate_intro()
         
         while True:
@@ -208,78 +230,125 @@ class VoiceEngine:
             else:
                 i_lower = intent.lower()
                 
-                # --- INQUIRY DETECTION ---
+                # --- INQUIRY & MOVEMENT DETECTION ---
                 inquiry_prefixes = ["who", "what", "where", "when", "why", "how", "can i", "is there", "are there", "do i"]
                 is_inquiry = any(i_lower.startswith(q) for q in inquiry_prefixes) or "?" in intent
+                
+                movement_prefixes = ["go", "walk", "move", "run", "head", "travel", "proceed", "continue"]
+                is_movement = any(i_lower.startswith(m) for m in movement_prefixes)
                 
                 if is_inquiry:
                     mech_result = f"[OBSERVATION]: {self.player.name} takes a moment to observe and consider: '{intent}'."
                     print(">>> Inquiry Detected. Bypassing Skill Check.")
-                else:
-                    # Basic Skill Check mapping with HARDCODED CONSEQUENCES
-                    action_stat = "might"
-                    if "climb" in i_lower or "jump" in i_lower or "push" in i_lower or "break" in i_lower:
-                        action_stat = "might"
-                    elif "sneak" in i_lower or "hide" in i_lower or "pick" in i_lower or "dodge" in i_lower:
-                        action_stat = "finesse"
-                    elif "look" in i_lower or "search" in i_lower or "listen" in i_lower:
-                        action_stat = "awareness"
-                    elif "talk" in i_lower or "persuade" in i_lower or "lie" in i_lower or "fuck" in i_lower:
-                        action_stat = "charm"
-                    elif "think" in i_lower or "remember" in i_lower or "read" in i_lower:
-                        action_stat = "knowledge"
-                    elif "attack" in i_lower or "strike" in i_lower or "kill" in i_lower or "shoot" in i_lower:
-                        action_stat = "might"
-                    
-                    stat_val = self.player.stats.get(action_stat, 5)
-                    roll = random.randint(1, 20)
-                    total = roll + stat_val
-                    
-                    # Hardcoded Templates - NO WIGGLE ROOM
-                    if roll == 20:
-                        mech_result = f"{self.player.name} critically succeeds! The action is performed flawlessly and deals massive impact."
-                    elif roll == 1:
-                        mech_result = f"{self.player.name} critically fails. The action goes disastrously wrong, causing immediate danger."
-                    elif total >= 15:
-                        if action_stat == "might":
-                            mech_result = f"{self.player.name} strikes with overwhelming force. The target is destroyed or heavily damaged."
-                        elif action_stat == "finesse":
-                            mech_result = f"{self.player.name} slips by unnoticed or performs the delicate task perfectly."
-                        elif action_stat == "awareness":
-                            mech_result = f"{self.player.name} spots a hidden detail or senses an approaching threat before it arrives."
-                        elif action_stat == "charm":
-                            mech_result = f"{self.player.name}'s words ring true. The NPC is convinced or pacified."
-                        else:
-                            mech_result = f"{self.player.name} succeeds completely without complication."
-                    elif total >= 10:
-                        mech_result = f"{self.player.name} succeeds, but at a cost. They take 1 damage or alert a nearby enemy."
-                    else:
-                        mech_result = f"{self.player.name} fails entirely. They take damage or the situation escalates immediately."
+                elif is_movement:
+                    # Determine target zone based on intent
+                    target_zone = "Close"
+                    if "melee" in i_lower or "engage" in i_lower or "towards" in i_lower:
+                        target_zone = "Melee"
+                    elif "far" in i_lower or "away" in i_lower or "back" in i_lower:
+                        target_zone = "Far"
                         
-                    print(f">>> Hardcoded Skill Check: {mech_result}")
+                    # Movement is a free Move Beat, no Stamina cost
+                    if hasattr(self, "seed_manager") and hasattr(self.seed_manager, "move_entity"):
+                        self.seed_manager.move_entity(self.player.name if self.player else "Player", target_zone)
+                        
+                    mech_result = f"[MOVEMENT]: {self.player.name} uses their Move Beat to shift to the {target_zone} zone."
+                    print(">>> Movement Detected.")
+                    event_bus.publish("PLAYER_MOVE_VTT", {"direction": intent})
+                else:
+                    if self.rules_callback:
+                        # Use proper unified rules engine for ALL actions
+                        print(">>> Engaging Unified Rules Engine...")
+                        # Extract target loosely
+                        target_guess = "Environment"
+                        words = i_lower.split()
+                        for word in words:
+                            if word not in ["i", "attack", "strike", "kill", "shoot", "the", "a", "jump", "push", "sneak", "hide"]:
+                                target_guess = word.capitalize()
+                                break
+                        
+                        # Fetch Zones if we have the simulator
+                        actor_zone = "Melee"
+                        target_z = "Melee"
+                        if hasattr(self, "seed_manager") and hasattr(self.seed_manager, "get_entity_zone"):
+                            actor_zone = self.seed_manager.get_entity_zone(self.player.name if self.player else "Player")
+                            target_z = self.seed_manager.get_entity_zone(target_guess)
+                            
+                        # If the target isn't found in the map, default it to Melee for now to avoid breaking static combat
+                        if target_z == "Unknown":
+                            target_z = actor_zone
+                        
+                        combat_res = self.rules_callback(
+                            intent, 
+                            self.player.name if self.player else "Player", 
+                            target_guess,
+                            incoming_tags=[],
+                            actor_zone=actor_zone,
+                            target_zone=target_z
+                        )
+                        mech_result = combat_res.get("narrative_hint", "The action resolves.")
+                    else:
+                        mech_result = "No rules engine hooked up to resolve action."
+                    
+                    print(f">>> Rules Engine Result: {mech_result}")
 
-            # --- PHASE 6: DIRECTOR NARRATION ---
-            lore_with_quest = f"{self.current_location_lore}\nCURRENT MOTIVATION: {self.current_quest}"
-            prompt = self.ai.generate_llm_prompt(mech_result, lore_with_quest, intent_raw=intent, filters=self.filters_string)
+            # --- PHASE 6: DIRECTOR NARRATION (SCRIPT READER) ---
+            # The AI is reinstated in the real-time loop to handle dialogue/actions, 
+            # but is strictly constrained to read the background-generated script.
+            scene_script = self.campaign_weaver.get_scene_script()
+            subtle_seeds = self.seed_manager.get_active_seeds(self.current_location_id)
+            
+            prompt = self.ai.build_director_prompt_with_spine(
+                location_name=self.current_location_name,
+                local_lore=self.current_location_lore,
+                subtle_seeds=subtle_seeds,
+                campaign_weaver=self.campaign_weaver,
+                filters=self.filters_string,
+                intent_raw=intent,
+                mechanical_result=mech_result,
+                scene_script=scene_script
+            )
             
             self.last_intent = intent
             self.last_prompt = prompt
             
             self.update_ui_state(narration_text=prompt)
-            self.tts.speak(prompt)
+            event_bus.publish("REQUEST_TTS", {"text": prompt})
+            
+            # Extract hallucinated physical entities for the UI map
+            print(">>> Extracting Interactive Entities for VTT...")
+            entities_json_str = self.ai.extract_scene_entities(prompt)
+            try:
+                entities_list = json.loads(entities_json_str)
+                if entities_list:
+                    print(f">>> VTT Entities Spawned: {len(entities_list)}")
+                    event_bus.publish("SPAWN_VTT_ENTITIES", {"entities": entities_list})
+            except Exception as e:
+                print(f"Failed to parse entities JSON: {e}")
             
             # --- PHASE 3: CONSEQUENCE HOOK (Reactive Seeds) ---
             seed_json = self.ai.evaluate_action_for_seed(intent, prompt)
             if seed_json:
                 try:
                     seed_data = json.loads(seed_json)
-                    self.seed_manager.create_seed(
+                    seed_id = self.seed_manager.create_seed(
                         location_id=self.current_location_id,
                         origin_action=seed_data.get("origin_action", intent),
                         subtle_description=seed_data.get("subtle_description", "Something has changed here."),
                         target_entity=seed_data.get("target_entity", "Environment")
                     )
-                    print(">>> Generated new Reactive Seed from player action.")
+                    print(f"\n[SEED GENERATED] Origin: {seed_data.get('origin_action')}")
+                    print(f"Subtle Description: {seed_data.get('subtle_description')}")
+                    
+                    # Interactive Slotting: Automatically slot this seed into the Campaign Framework
+                    self.campaign_weaver.slot_seed(
+                        seed_id,
+                        ai_director=self.ai,
+                        location_name=self.current_location_name,
+                        local_lore=self.current_location_lore,
+                        subtle_seeds=self.seed_manager.get_active_seeds(self.current_location_id)
+                    )
+                    
                 except json.JSONDecodeError:
                     pass
             
@@ -290,17 +359,58 @@ class VoiceEngine:
         """Forces the LLM to generate a strong, contextual opening crawl."""
         lore_with_quest = f"LOCATION: {self.current_location_name}\nCULTURAL LORE: {self.current_location_lore}\nPLOT HOOK: {self.current_quest}"
         
+        origin_str = getattr(self.player, "biological_origin", "Drifter")
+        culture_details = ""
+        world_lore = "Okasha is a brutal, chaotic world of warped species."
+        
+        try:
+            import sqlite3
+            conn = sqlite3.connect("okasha_world.db")
+            
+            # Fetch Origin details from cultures table
+            culture_row = conn.execute("SELECT name, type, namesbase, population FROM cultures WHERE name LIKE ?", ('%' + origin_str + '%',)).fetchone()
+            if culture_row:
+                c_name, c_type, c_namesbase, c_pop = culture_row
+                culture_details = f"Your species is {c_name} (Type: {c_type}). Your culture heavily features {c_namesbase} aesthetics. Your global population is around {c_pop}."
+            else:
+                culture_details = f"Your biological makeup is {origin_str}. You are a unique mutant survivor of the drift, possessing no ties to the major factions."
+            
+            # Fetch a random piece of introductory world lore from detailed_lore
+            lore_row = conn.execute("SELECT title, content FROM detailed_lore WHERE chapter LIKE '%The First Age%' AND content != '' LIMIT 1").fetchone()
+            if lore_row:
+                world_lore = f"Lore context - {lore_row[0]}: {lore_row[1][:400]}"
+            
+            conn.close()
+        except Exception as e:
+            print(f"Error fetching lore DB: {e}")
+        
+        # Generate the rigid Campaign Spine Frame
+        self.campaign_weaver.generate_campaign_frame()
+        self.campaign_weaver.trigger_background_script_generation(
+            self.ai, self.current_location_name, self.current_location_lore, self.seed_manager.get_active_seeds(self.current_location_id)
+        )
+        
+        current_slot = self.campaign_weaver.get_current_slot()
+        slot_directive = f"Act {current_slot['act']}, Step {current_slot['step']}: {current_slot['type']}" if current_slot else "Free Roam"
+
         # Override the standard LLM prompt for the intro
         intro_directive = (
-            "CRITICAL DIRECTIVE: This is the opening narration of the game. "
-            f"Introduce the player character, {self.player.name}. Describe their arrival or presence in {self.current_location_name} "
-            "based heavily on the Cultural Lore provided. Establish the atmosphere, sight, and sounds of the settlement. "
-            "End by explicitly introducing the Plot Hook and asking 'What do you do?'"
+            "CRITICAL DIRECTIVE (SMART NARRATION PROTOCOL): This is the opening narration of the game. "
+            f"CURRENT CAMPAIGN SCRIPT: You are in {slot_directive}. You MUST establish this specific story beat.\n"
+            f"Introduce the player character, {self.player.name}, who is a {origin_str}. "
+            f"{culture_details} "
+            "STRICT LORE RULE: This is the world of Okasha. There are NO humans, elves, dwarves, orcs, or standard fantasy races. "
+            f"Background Lore snippet: {world_lore}... "
+            f"1. TONE: Be direct, gritty, and concise. Describe their arrival in {self.current_location_name} without being overly poetic or flowery.\n"
+            "2. BREVITY: Limit your narration to 3-4 punchy sentences (maximum 80 words). Be dramatic and conversational.\n"
+            "3. AGENCY HANDOFF: End by explicitly introducing the Plot Hook and asking 'What do you do?'"
         )
         
         prompt = self.ai.generate_llm_prompt(intro_directive, lore_with_quest, intent_raw="Start Game", filters=self.filters_string)
         self.last_intent = "Start Game"
         self.last_prompt = prompt
+        
+        self._has_narrated_cell_lore = True
         
         self.update_ui_state(narration_text=prompt)
         self.tts.speak(prompt)
@@ -309,7 +419,11 @@ class VoiceEngine:
         """Builds the deep lore prompt using the Campaign Weaver."""
         active_seeds = self.seed_manager.get_active_seeds(self.current_location_id)
         
-        lore_with_quest = f"{self.current_location_lore}\nCURRENT MOTIVATION: {self.current_quest}"
+        if not getattr(self, '_has_narrated_cell_lore', False):
+            lore_with_quest = f"{self.current_location_lore}\nCURRENT MOTIVATION: {self.current_quest}"
+            self._has_narrated_cell_lore = True
+        else:
+            lore_with_quest = f"You are still in {self.current_location_name}. CURRENT MOTIVATION: {self.current_quest}"
         
         prompt = self.ai.build_director_prompt_with_spine(
             location_name=self.current_location_name,

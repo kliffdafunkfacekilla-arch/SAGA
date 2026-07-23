@@ -28,7 +28,7 @@ class SeedManager:
     def create_seed(self, location_id: str, origin_action: str, subtle_description: str, target_entity: str, urgency: int = 3) -> str:
         seed_id = str(uuid.uuid4())
         
-        with closing(self.db._get_connection()) as conn:
+        with closing(self.db._get_local_connection()) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "INSERT INTO reactive_seeds (seed_id, location_id, origin_action, subtle_description, target_entity, urgency_ticks, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -40,17 +40,26 @@ class SeedManager:
         
     def get_active_seeds(self, location_id: str) -> list[ReactiveSeed]:
         seeds = []
-        with closing(self.db._get_connection()) as conn:
+        with closing(self.db._get_local_connection()) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT seed_id, location_id, origin_action, subtle_description, target_entity, urgency_ticks, status FROM reactive_seeds WHERE location_id = ? AND status IN ('Subtle', 'Escalated')", (location_id,))
             rows = cursor.fetchall()
             for r in rows:
                 seeds.append(ReactiveSeed(*r))
         return seeds
+
+    def get_seed(self, seed_id: str) -> ReactiveSeed:
+        with closing(self.db._get_local_connection()) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT seed_id, location_id, origin_action, subtle_description, target_entity, urgency_ticks, status FROM reactive_seeds WHERE seed_id = ?", (seed_id,))
+            row = cursor.fetchone()
+            if row:
+                return ReactiveSeed(*row)
+        return None
         
     def tick_simulation(self):
         """Advances time. Drops urgency. Mutates if urgency hits 0."""
-        with closing(self.db._get_connection()) as conn:
+        with closing(self.db._get_local_connection()) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT seed_id, location_id, origin_action, subtle_description, target_entity, urgency_ticks, status FROM reactive_seeds WHERE status IN ('Subtle', 'Escalated')")
             rows = cursor.fetchall()

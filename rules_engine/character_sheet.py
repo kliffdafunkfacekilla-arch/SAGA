@@ -39,11 +39,6 @@ class CharacterSheet:
         self.active_bleed = False
         self.active_trauma = False
         self.is_zero_state = False
-        self.looted = False
-        
-        # Clash/Combat Mechanics
-        self.has_active_defended = False
-        self.has_advantage = False
         
         # Functional State
         self.tags = set()
@@ -53,46 +48,31 @@ class CharacterSheet:
         self._init_battery()
         
     def _derive_pools(self):
-        # SET 1: CAPACITIES & THRESHOLDS
-        # Health [2 Body, 1 Mind]
-        self.max_hp = self.stats["vitality"] + self.stats["endurance"] + self.stats["willpower"]
-        self.current_hp = getattr(self, 'current_hp', self.max_hp)
+        # HP: Endurance + Fortitude + Vitality
+        self.max_hp = self.stats["endurance"] + self.stats["fortitude"] + self.stats["vitality"]
+        self.current_hp = self.max_hp
         
-        # Stamina (Pool) [2 Body, 1 Mind]
-        self.max_stamina = self.stats["might"] + self.stats["finesse"] + self.stats["intuition"]
+        # Composure: Willpower + Logic + Charm
+        self.max_composure = self.stats["willpower"] + self.stats["logic"] + self.stats["charm"]
+        self.current_composure = self.max_composure
         
-        # Focus (Pool) [1 Body, 2 Mind]
-        self.max_focus = self.stats["logic"] + self.stats["charm"] + self.stats["reflexes"]
-        
-        # Composure [1 Body, 2 Mind]
-        self.max_composure = self.stats["knowledge"] + self.stats["awareness"] + self.stats["fortitude"]
-        self.current_composure = getattr(self, 'current_composure', self.max_composure)
+        # Capacities
+        self.max_stamina = self.stats["might"] + self.stats["reflexes"] + self.stats["finesse"]
+        self.max_focus = self.stats["knowledge"] + self.stats["awareness"] + self.stats["intuition"]
         
     def _init_battery(self):
         # Active Battery: All combatants initialize with 10 tokens
         self.active_stamina = 10
         self.active_focus = 10
         self.is_zero_state = False
-        self.beats = {"move": 1, "stamina": 1, "focus": 1}
-        
-    def start_turn(self):
-        """Regenerate beats and pools based on Loadout Tax."""
-        self.beats = {"move": 1, "stamina": 1, "focus": 1}
-        self.has_active_defended = False
-        
-        tax = self.inventory.get_physical_tax() + self.inventory.get_mental_tax()
-        regen_rate = 1 if tax > (self.max_stamina / 2) else 2
-        
-        # Cap regen at 75% max
-        stamina_cap = int(self.max_stamina * 0.75)
-        focus_cap = int(self.max_focus * 0.75)
-        
-        if self.active_stamina < stamina_cap:
-            self.active_stamina = min(self.active_stamina + regen_rate, stamina_cap)
-            
-        if self.active_focus < focus_cap:
-            self.active_focus = min(self.active_focus + regen_rate, focus_cap)
 
+    def start_turn(self):
+        """Regenerates the action battery at the start of a turn."""
+        if not self.is_zero_state:
+            # Regenerate up to 10 tokens per turn
+            self.active_stamina = min(10, self.active_stamina + 3)
+            self.active_focus = min(10, self.active_focus + 3)
+        
     def get_reserve_pool(self) -> int:
         """Reserve pool is capacity minus gear tax."""
         tax = self.inventory.get_physical_tax() + self.inventory.get_mental_tax()
@@ -109,15 +89,14 @@ class CharacterSheet:
         
     def get_derived_stat(self, stat_name: str) -> int:
         stat_name = stat_name.lower()
-        # SET 2: COMBAT, SENSES & DEFENSE
-        if stat_name in ["physical defense", "phys_def"]:
-            return self.get_stat("might") + self.get_stat("fortitude") + self.get_stat("logic")
-        elif stat_name in ["speed", "initiative"]:
-            return self.get_stat("reflexes") + self.get_stat("endurance") + self.get_stat("willpower")
-        elif stat_name in ["perception"]:
-            return self.get_stat("finesse") + self.get_stat("knowledge") + self.get_stat("awareness")
-        elif stat_name in ["mental defense", "ment_def"]:
-            return self.get_stat("vitality") + self.get_stat("charm") + self.get_stat("intuition")
+        if stat_name == "perception":
+            return self.get_stat("awareness") + self.get_stat("logic") + self.get_stat("vitality")
+        elif stat_name in ["stealth", "camo"]:
+            return self.get_stat("knowledge") + self.get_stat("charm") + self.get_stat("finesse")
+        elif stat_name in ["movement", "speed"]:
+            return self.get_stat("reflexes") + self.get_stat("might") + self.get_stat("intuition")
+        elif stat_name in ["balance", "sure-footedness"]:
+            return self.get_stat("endurance") + self.get_stat("fortitude") + self.get_stat("willpower")
         return 0
         
     def is_physically_encumbered(self) -> bool:
@@ -128,10 +107,6 @@ class CharacterSheet:
         """Returns True if mental gear tax exceeds 50% of Focus Capacity."""
         return self.inventory.get_mental_tax() > (self.max_focus / 2)
         
-    def reset_turn_states(self):
-        self.has_active_defended = False
-        self.has_advantage = False
-
     def take_damage(self, amount: int, is_composure: bool = False):
         if is_composure:
             self.current_composure -= amount

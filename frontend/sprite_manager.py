@@ -111,6 +111,24 @@ class SpriteManager:
                 self.cache[name] = scaled
                 return scaled
                 
+        # Handle miss: assign a random processed sprite if it's likely an entity
+        is_terrain = any(term in search_name for term in ["wall", "grass", "floor", "door", "path"])
+        if not is_terrain:
+            processed_dir = os.path.join(self.base_assets_dir, "sprites", "processed")
+            if os.path.exists(processed_dir):
+                import random
+                import glob
+                processed_sprites = glob.glob(os.path.join(processed_dir, "*.png"))
+                if processed_sprites:
+                    chosen_sprite = random.choice(processed_sprites)
+                    # Use set_mapping to persist the assignment
+                    self.set_mapping(search_name, chosen_sprite)
+                    pixmap = QPixmap(chosen_sprite)
+                    if not pixmap.isNull():
+                        scaled = pixmap.scaled(self.tile_size, self.tile_size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                        self.cache[search_name] = scaled
+                        return scaled
+
         # Handle miss: fallback depending on name
         if "wall" in name.lower():
             return self.fallback["wall"]

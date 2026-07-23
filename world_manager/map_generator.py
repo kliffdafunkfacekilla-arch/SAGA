@@ -1,40 +1,32 @@
 import random
 
 class BattlemapGenerator:
-    """
-    Generates the highly granular 100x100 tile matrix for a specific local map.
-    Implements semantic structures (Towns, Wilderness) and contextual entity spawning.
-    """
+    """Generates a 100x100 grid for a specific biome."""
     def __init__(self):
         self.width = 100
         self.height = 100
-        
-    def generate(self, biome_type: str, has_poi: bool, poi_context: str = "") -> dict:
-        """
-        Returns a dictionary containing the 100x100 grid data and spawned entities.
-        0 = Empty, 1 = Obstacle (Tree/Rock), 2 = Water, 3 = POI/Building, 4 = Road
-        """
+
+    def generate(self, biome_type: str, has_poi: bool = False, poi_context: str = "") -> dict:
         grid = [[0 for _ in range(self.width)] for _ in range(self.height)]
         entities = []
         
-        if biome_type == "Town":
+        if biome_type == "Forest" or biome_type == "Wilderness":
+            self._generate_organic(grid, biome_type)
+        elif biome_type == "Town":
             self._generate_town(grid, entities)
-        else:
-            self._generate_wilderness(grid, biome_type)
             
-        # Inject explicit POI from the Story Manager
         if has_poi:
             self._inject_poi(grid, entities, poi_context)
             
         return {
+            "grid": grid,
             "width": self.width,
             "height": self.height,
-            "grid": grid,
             "biome": biome_type,
             "entities": entities
         }
-        
-    def _generate_wilderness(self, grid, biome_type):
+
+    def _generate_organic(self, grid, biome_type):
         """Cellular-automata style organic clumping."""
         # Initial noise
         density = 0.2 if biome_type == "Forest" else 0.1
@@ -151,7 +143,7 @@ class ClusterManager:
         self.global_time_hours = 0
         self.global_time_days = 0
         
-    def generate_cluster(self, region_id: int, base_biome: str, poi_coords: list, poi_context: str = ""):
+    def generate_cluster(self, region_id: int, base_biome: str, poi_coords: list, poi_context: str = "", blueprint: dict = None):
         self.current_region_id = region_id
         self.cluster_grid = [[{"biome": base_biome, "has_poi": False, "poi_context": ""} 
                               for _ in range(self.cluster_width)] 
@@ -160,6 +152,13 @@ class ClusterManager:
         # Force a town into the cluster for logic testing
         self.cluster_grid[12][12]["biome"] = "Town"
         
+        # Apply Blueprint Constraints
+        self.current_blueprint = blueprint
+        if blueprint and "visual_state" in blueprint:
+            v_state = blueprint["visual_state"]
+            if "weather_tags" in v_state and len(v_state["weather_tags"]) > 0:
+                self.weather.current_state = v_state["weather_tags"][0].capitalize()
+                
         # Inject POIs (Story Hooks)
         for coord in poi_coords:
             cx, cy = coord
@@ -173,6 +172,22 @@ class ClusterManager:
             bmap = self.battlemap_gen.generate(cell_logic["biome"], cell_logic["has_poi"], cell_logic["poi_context"])
             bmap["weather"] = self.weather.current_state
             bmap["global_tags"] = self.weather.get_global_tags()
+            
+            # Inject Blueprint Encounters
+            if hasattr(self, "current_blueprint") and self.current_blueprint:
+                encounters = self.current_blueprint.get("planned_encounters", [])
+                import random
+                for enc in encounters:
+                    bmap["entities"].append({
+                        "name": enc.get("name", "Unknown Figure"),
+                        "type": enc.get("type", "NPC"),
+                        "x": random.randint(45, 55),
+                        "y": random.randint(45, 55),
+                        "behavior": "blueprint_spawn",
+                        "task": enc.get("location_zone", "Melee"),
+                        "personality": ""
+                    })
+                    
             return bmap
         return None
         
@@ -211,3 +226,81 @@ class ClusterManager:
         mgr.weather.current_state = data.get("weather_state", "Clear")
         mgr.weather.hours_until_change = data.get("weather_timer", 24)
         return mgr
+
+class ZoneMapGenerator:
+    """
+    Abstract map generator that organizes entities into abstract distance bands 
+    (Melee, Close, Far) for narrative combat resolution without a strict 2D grid.
+    """
+    def __init__(self):
+        self.zones = {
+            "Melee": [],
+            "Close": [],
+            "Far": []
+        }
+        self.environment_tags = []
+        
+    def generate(self, biome_type: str, active_seed: dict = None) -> dict:
+        self.zones = {"Melee": [], "Close": [], "Far": []}
+        self.environment_tags = []
+        
+        if biome_type == "Forest":
+            self.environment_tags = ["wooded", "difficult terrain", "flammable"]
+            self._scatter_cover(5, ["tree", "brush", "log"])
+        elif biome_type == "Town":
+            self.environment_tags = ["urban", "populated", "cover"]
+            self._scatter_cover(3, ["cart", "barrel", "wall"])
+            
+        if active_seed:
+            self._inject_seed(active_seed)
+            
+        return {
+            "zones": self.zones,
+            "environment_tags": self.environment_tags
+        }
+        
+    def _scatter_cover(self, count, object_types):
+        for _ in range(count):
+            obj_name = random.choice(object_types)
+            entity = {
+                "name": obj_name,
+                "tags": self._derive_tags(obj_name)
+            }
+            # 50% chance in Melee or Close
+            zone = random.choice(["Melee", "Close", "Far"])
+            self.zones[zone].append(entity)
+            
+    def _inject_seed(self, seed: dict):
+        """
+        Interprets a story seed and injects hostile or key entities.
+        If urgency is low (escalated), they start in Melee/Close.
+        """
+        desc = seed.get("subtle_description", "").lower()
+        urgency = seed.get("urgency_ticks", 5)
+        
+        if urgency <= 0 or "ambush" in desc or "attack" in desc:
+            spawn_zone = "Melee"
+        elif urgency <= 2 or "approach" in desc or "patrol" in desc:
+            spawn_zone = "Close"
+        else:
+            spawn_zone = "Far"
+            
+        entity_name = seed.get("target_entity", "Unknown Threat")
+        entity = {
+            "name": entity_name,
+            "tags": self._derive_tags(entity_name) + ["hostile", "seed_spawn"]
+        }
+        self.zones[spawn_zone].append(entity)
+        
+    def _derive_tags(self, entity_name: str) -> list:
+        name = entity_name.lower()
+        tags = []
+        if "wood" in name or "log" in name or "tree" in name or "brush" in name:
+            tags.extend(["flammable", "fragile"])
+        if "stone" in name or "rock" in name or "pillar" in name:
+            tags.extend(["heavy", "cover"])
+        if "water" in name or "river" in name:
+            tags.extend(["wet", "liquid"])
+        if "guard" in name or "bandit" in name or "threat" in name:
+            tags.extend(["flesh", "movable"])
+        return list(set(tags))
