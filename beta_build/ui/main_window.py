@@ -9,11 +9,11 @@ from beta_build.ui.event_bus import EventBus
 from beta_build.ai_services.llm_worker import LLMWorker
 from beta_build.audio.audio_manager import TTSWorker, STTWorker
 from beta_build.core.models import CharacterSheet
-from ai_dm.director import AIDirector
+from beta_build.ai_services.director import AIDirector
 
 # --- Frontend Components ---
-from frontend.char_creation import CharacterCreationScreen
-from frontend.character_management import CharacterManagementScreen
+from beta_build.ui.char_creation import CharacterCreationScreen
+from beta_build.ui.character_management import CharacterManagementScreen
 from beta_build.ui.map_view import MapCanvas
 from beta_build.ui.screens import StartMenu, VendorScreen
 

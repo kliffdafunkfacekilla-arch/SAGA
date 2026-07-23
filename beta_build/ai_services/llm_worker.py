@@ -25,6 +25,9 @@ class LLMWorker(QThread):
         
         # Request Queue
         self._current_request = None
+        
+        # Initialize model on MAIN THREAD to prevent QThread access violation crash
+        self.initialize_model()
 
     def initialize_model(self):
         default_dir = Path(__file__).resolve().parents[2] / "models"
@@ -52,7 +55,6 @@ class LLMWorker(QThread):
 
     def run(self):
         """Main thread loop that processes inference requests."""
-        self.initialize_model()
         if not self._is_ready:
             return
             

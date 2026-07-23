@@ -1,5 +1,23 @@
+# Runtime Data and Databases
+runtime_data/
+saves/
+*.db
+*.log
+*.sqlite
+*.sqlite3
+
 # Ignore large model files
 *.gguf
 models/
+
+# Ignore Assets and Generated Data
+assets/
+processed_sprites/
+scene_state.json
+
+# Cache
 __pycache__/
 *.pyc
+
+# Test outputs
+out.txt

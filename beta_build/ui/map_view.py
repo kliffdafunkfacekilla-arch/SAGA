@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 from PyQt6.QtCore import Qt, pyqtSlot
 from PyQt6.QtGui import QBrush, QColor
 
-from frontend.sprite_manager import SpriteManager
+from beta_build.ui.sprite_manager import SpriteManager
 from beta_build.ui.hud import CharacterHUD, StoryTracker
 
 class BattleMapCanvas(QGraphicsView):
