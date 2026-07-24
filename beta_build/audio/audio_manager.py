@@ -2,6 +2,8 @@ import pyttsx3
 import speech_recognition as sr
 from PyQt6.QtCore import QThread, pyqtSignal
 import asyncio
+import numpy as np
+from faster_whisper import WhisperModel
 
 class TTSWorker(QThread):
     """
@@ -53,7 +55,11 @@ class STTWorker(QThread):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.recognizer = sr.Recognizer()
-        self.microphone = sr.Microphone()
+        # Force 16kHz sample rate for Whisper compatibility
+        self.microphone = sr.Microphone(sample_rate=16000)
+        
+        # Load local Faster-Whisper model (tiny.en for max speed on CPU)
+        self.model = WhisperModel("tiny.en", device="cpu", compute_type="int8")
         
         # Optimize recognizer for quicker responses
         self.recognizer.energy_threshold = 300
@@ -74,8 +80,13 @@ class STTWorker(QThread):
                     audio = self.recognizer.listen(source, timeout=1, phrase_time_limit=10)
                 
                 self.listening_status.emit(False)
-                # Attempt to transcribe
-                text = self.recognizer.recognize_google(audio)
+                # Attempt to transcribe locally
+                raw_data = audio.get_raw_data(convert_rate=16000, convert_width=2)
+                audio_np = np.frombuffer(raw_data, np.int16).astype(np.float32) / 32768.0
+                
+                segments, _ = self.model.transcribe(audio_np, beam_size=1)
+                text = " ".join([segment.text for segment in segments]).strip()
+                
                 if text:
                     self.speech_recognized.emit(text)
                     
