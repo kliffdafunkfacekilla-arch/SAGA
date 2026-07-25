@@ -1,60 +1,88 @@
 """
 Provides the CharacterHUD and StoryTracker components for the right-hand panel of the VTT.
 """
-from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel, QTextEdit
+from PyQt6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit, QProgressBar
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap
 
 class CharacterHUD(QFrame):
     """
-    Displays the character's core stats (HP, Stamina, Focus) using graphical elements.
+    Displays the character's core stats (HP, Stamina, Focus) using pure QSS graphical elements.
     Listens for 'HUD_UPDATE' events to refresh data from the Pydantic CharacterSheet.
     """
     def __init__(self):
         super().__init__()
         self.setStyleSheet("""
             QFrame {
-                background-color: #1a1a1a;
-                border: 2px solid #555;
-                border-radius: 5px;
+                background-color: #0f1115;
+                border: 2px solid #2b323b;
+                border-radius: 4px;
                 padding: 10px;
             }
-            QLabel { color: #ddd; font-weight: bold; font-family: monospace; font-size: 14px; border: none; }
+            QLabel { 
+                color: #d8d8d8; 
+                font-family: 'Segoe UI', serif; 
+                font-weight: bold; 
+                border: none; 
+            }
+            QProgressBar {
+                background-color: #14171c;
+                border: 1px solid #1a1e24;
+                border-radius: 3px;
+                text-align: center;
+                color: white;
+                font-size: 12px;
+                font-weight: bold;
+                height: 18px;
+            }
         """)
-        self.setFixedWidth(250)
+        self.setFixedWidth(260)
         
         layout = QVBoxLayout()
+        layout.setSpacing(12)
         
-        # UI Polish: Asset injection
-        self.portrait_label = QLabel()
-        portrait_pixmap = QPixmap("assets/gui/Fantasy Minimal Pixel Art GUI by eta-commercial-free/UI/CharacterBox_56x57.png")
-        if not portrait_pixmap.isNull():
-            self.portrait_label.setPixmap(portrait_pixmap)
-            self.portrait_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.portrait_label)
-        
-        self.name_label = QLabel("Player Name")
-        self.name_label.setStyleSheet("font-size: 18px; color: #44FF44; margin-bottom: 10px;")
-        
-        # Use HealthBarPanel background if possible
-        bar_bg = QPixmap("assets/gui/Fantasy Minimal Pixel Art GUI by eta-commercial-free/UI/HealthBarPanel_160x41.png")
-        
-        self.hp_label = QLabel("HP: --/--")
-        if not bar_bg.isNull():
-            self.hp_label.setStyleSheet("color: #FF5555; background-image: url('assets/gui/Fantasy Minimal Pixel Art GUI by eta-commercial-free/UI/HealthBarPanel_160x41.png'); padding: 5px;")
-        
-        self.stamina_label = QLabel("Stamina: --/--")
-        self.focus_label = QLabel("Focus: --/--")
-        if not bar_bg.isNull():
-            self.focus_label.setStyleSheet("color: #5555FF; background-image: url('assets/gui/Fantasy Minimal Pixel Art GUI by eta-commercial-free/UI/HealthBarPanel_160x41.png'); padding: 5px;")
-            
-        self.trauma_label = QLabel("Trauma Tokens: 0")
-        
+        # Name Plate
+        self.name_label = QLabel("WANDERER")
+        self.name_label.setStyleSheet("font-size: 18px; color: #a49a85; letter-spacing: 2px; text-transform: uppercase;")
+        self.name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.name_label)
+        
+        # Health Bar (Crimson)
+        self.hp_label = QLabel("HEALTH")
+        self.hp_label.setStyleSheet("font-size: 11px; color: #888;")
+        self.hp_bar = QProgressBar()
+        self.hp_bar.setStyleSheet("QProgressBar::chunk { background-color: #8b1c1c; border-radius: 2px; }")
         layout.addWidget(self.hp_label)
+        layout.addWidget(self.hp_bar)
+        
+        # Stamina Bar (Gritty Gold/Ochre)
+        self.stamina_label = QLabel("STAMINA")
+        self.stamina_label.setStyleSheet("font-size: 11px; color: #888;")
+        self.stamina_bar = QProgressBar()
+        self.stamina_bar.setStyleSheet("QProgressBar::chunk { background-color: #b08d43; border-radius: 2px; }")
         layout.addWidget(self.stamina_label)
+        layout.addWidget(self.stamina_bar)
+        
+        # Focus Bar (Deep Void Blue)
+        self.focus_label = QLabel("FOCUS")
+        self.focus_label.setStyleSheet("font-size: 11px; color: #888;")
+        self.focus_bar = QProgressBar()
+        self.focus_bar.setStyleSheet("QProgressBar::chunk { background-color: #244170; border-radius: 2px; }")
         layout.addWidget(self.focus_label)
-        layout.addWidget(self.trauma_label)
+        layout.addWidget(self.focus_bar)
+        
+        # Weapon / State info
+        state_layout = QHBoxLayout()
+        self.weapon_label = QLabel("Weapon: Unarmed")
+        self.weapon_label.setStyleSheet("color: #a49a85; font-size: 12px;")
+        
+        self.trauma_label = QLabel("Trauma: 0")
+        self.trauma_label.setStyleSheet("color: #ff4444; font-size: 12px;")
+        
+        state_layout.addWidget(self.weapon_label)
+        state_layout.addStretch()
+        state_layout.addWidget(self.trauma_label)
+        
+        layout.addLayout(state_layout)
         layout.addStretch()
         
         self.setLayout(layout)
@@ -62,15 +90,40 @@ class CharacterHUD(QFrame):
     def update_stats(self, stats: dict):
         """
         Updates the HUD labels based on a serialized CharacterSheet dict.
-        
-        Args:
-            stats (dict): The serialized Pydantic model representation of the character.
         """
-        self.name_label.setText(stats.get("name", "Player"))
-        self.hp_label.setText(f"HP: {stats.get('current_hp', 0)} / {stats.get('max_hp', 0)}")
-        self.stamina_label.setText(f"Stamina: {stats.get('active_stamina', 0)} / {stats.get('max_stamina', 0)}")
-        self.focus_label.setText(f"Focus: {stats.get('active_focus', 0)} / {stats.get('max_focus', 0)}")
-        self.trauma_label.setText(f"Trauma Tokens: {stats.get('trauma_tokens', 0)}")
+        self.name_label.setText(stats.get("name", "WANDERER").upper())
+        
+        # HP Update
+        max_hp = stats.get('max_hp', 1)
+        cur_hp = stats.get('current_hp', 0)
+        self.hp_bar.setMaximum(max_hp)
+        self.hp_bar.setValue(cur_hp)
+        self.hp_bar.setFormat(f"{cur_hp} / {max_hp}")
+        
+        # Stamina Update
+        max_stam = stats.get('max_stamina', 1)
+        cur_stam = stats.get('active_stamina', 0)
+        self.stamina_bar.setMaximum(max_stam)
+        self.stamina_bar.setValue(cur_stam)
+        self.stamina_bar.setFormat(f"{cur_stam} / {max_stam}")
+        
+        # Focus Update
+        max_foc = stats.get('max_focus', 1)
+        cur_foc = stats.get('active_focus', 0)
+        self.focus_bar.setMaximum(max_foc)
+        self.focus_bar.setValue(cur_foc)
+        self.focus_bar.setFormat(f"{cur_foc} / {max_foc}")
+        
+        # Trauma & Weapon
+        self.trauma_label.setText(f"Trauma: {stats.get('trauma_tokens', 0)}")
+        
+        inventory = stats.get("inventory", {})
+        slots = inventory.get("slots", {})
+        weapon = slots.get("weapon")
+        if weapon:
+            self.weapon_label.setText(f"Weapon: {weapon.get('name', 'Unknown')}")
+        else:
+            self.weapon_label.setText("Weapon: Unarmed")
 
 
 class StoryTracker(QFrame):

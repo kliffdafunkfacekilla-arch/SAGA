@@ -3,17 +3,36 @@ Provides the MapCanvas and BattleMapCanvas components for the left-hand panel of
 """
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QTextEdit, QLineEdit, QGraphicsView, 
-                             QGraphicsScene, QMenu)
-from PyQt6.QtCore import Qt, pyqtSlot
-from PyQt6.QtGui import QBrush, QColor
+                             QGraphicsScene, QMenu, QGraphicsEllipseItem, QGraphicsItem, QGraphicsTextItem)
+from PyQt6.QtCore import Qt, pyqtSlot, QRectF
+from PyQt6.QtGui import QBrush, QColor, QPen, QPainter
 
 from beta_build.ui.sprite_manager import SpriteManager
 from beta_build.ui.hud import CharacterHUD, StoryTracker
 
+class TokenItem(QGraphicsEllipseItem):
+    """Dynamic map token representing an entity (player, monster, etc)."""
+    def __init__(self, x, y, size, color, name, uuid, parent=None):
+        super().__init__(0, 0, size, size, parent)
+        self.setPos(x * size, y * size)
+        self.uuid = uuid
+        self.name = name
+        
+        self.setBrush(QBrush(QColor(color)))
+        self.setPen(QPen(QColor("white"), 2))
+        
+        # Add label for name
+        self.label = QGraphicsTextItem(name, self)
+        self.label.setDefaultTextColor(QColor("white"))
+        self.label.setPos(0, -15)
+
+    def move_to_grid(self, x, y, size):
+        self.setPos(x * size, y * size)
+
 class BattleMapCanvas(QGraphicsView):
     """
     Renders the local battle map dynamically.
-    Uses SpriteManager to map graphical assets to the tactical grid.
+    Optimized 2D Engine using QGraphicsScene.
     """
     def __init__(self, bus):
         super().__init__()
@@ -24,124 +43,90 @@ class BattleMapCanvas(QGraphicsView):
         self.setBackgroundBrush(QBrush(QColor("#0a0a0a")))
         
         self.tile_size = 32
-        self.player_x = 50
-        self.player_y = 50
+        self.entities = {} # Map of UUID -> TokenItem
         
-        self.sprite_manager = SpriteManager(self.tile_size)
+        # Enable dragging/panning
+        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self.setRenderHint(QPainter.RenderHint.Antialiasing)
         
-    def load_matrix(self, battlemap_data: dict, px: int, py: int):
-        """
-        Loads grid data and renders the viewable window around the player.
-        """
-        self.scene.clear()
-        self.player_x = px
-        self.player_y = py
+    def drawBackground(self, painter: QPainter, rect: QRectF):
+        """Draws an infinite mathematical grid."""
+        super().drawBackground(painter, rect)
         
-        grid = battlemap_data.get("grid", [])
-        width = battlemap_data.get("width", 0)
-        height = battlemap_data.get("height", 0)
+        left = int(rect.left()) - (int(rect.left()) % self.tile_size)
+        top = int(rect.top()) - (int(rect.top()) % self.tile_size)
         
-        self.current_battlemap = battlemap_data
+        grid_pen = QPen(QColor("#2a2a2a"), 1, Qt.PenStyle.SolidLine)
+        painter.setPen(grid_pen)
         
-        if not grid: return
-        
-        # Viewport logic
-        vx_start = max(0, self.player_x - 10)
-        vy_start = max(0, self.player_y - 10)
-        vx_end = min(width, self.player_x + 10)
-        vy_end = min(height, self.player_y + 10)
-        
-        # Draw Map
-        for y in range(vy_start, vy_end):
-            for x in range(vx_start, vx_end):
-                if y < len(grid) and x < len(grid[y]):
-                    tile_val = grid[y][x]
-                    draw_x = (x - vx_start) * self.tile_size
-                    draw_y = (y - vy_start) * self.tile_size
-                    
-                    biome = battlemap_data.get("biome", "grass").lower()
-                    
-                    if tile_val == 1: 
-                        if biome in ["forest", "jungle", "taiga"]:
-                            sprite_name = "mangrove_1"
-                        elif biome in ["mountains", "hills", "volcanic"]:
-                            sprite_name = "boulder"
-                        else:
-                            sprite_name = "brick_brown_1"
-                    elif tile_val == 2: 
-                        sprite_name = "deep_water"
-                    elif tile_val == 3: 
-                        sprite_name = "shop_general" if biome == "town" else "abandoned_shop"
-                    elif tile_val == 4: 
-                        sprite_name = "dirt_0_new"
-                    else: 
-                        sprite_name = "black_cobalt_1" if biome == "town" else "grass_0_new"
-                    
-                    pm = self.sprite_manager.get_sprite(sprite_name)
-                    self.scene.addPixmap(pm).setPos(draw_x, draw_y)
-                    
-                    if x == self.player_x and y == self.player_y:
-                        player_sprite = self.sprite_manager.get_sprite("statue_ancient_hero")
-                        self.scene.addPixmap(player_sprite).setPos(draw_x, draw_y)
+        x = left
+        while x < rect.right():
+            painter.drawLine(x, int(rect.top()), x, int(rect.bottom()))
+            x += self.tile_size
+            
+        y = top
+        while y < rect.bottom():
+            painter.drawLine(int(rect.left()), y, int(rect.right()), y)
+            y += self.tile_size
 
-        # Draw Entities
-        entities = battlemap_data.get("entities", [])
-        for ent in entities:
-            ex = ent.get("x", 0)
-            ey = ent.get("y", 0)
-            if vx_start <= ex < vx_end and vy_start <= ey < vy_end:
-                draw_x = (ex - vx_start) * self.tile_size
-                draw_y = (ey - vy_start) * self.tile_size
-                
-                sprite_name = ent.get("sprite", "unseen")
-                pm = self.sprite_manager.get_sprite(sprite_name)
-                self.scene.addPixmap(pm).setPos(draw_x, draw_y)
+    def wheelEvent(self, event):
+        """Zoom in/out with mouse wheel."""
+        zoom_in_factor = 1.15
+        zoom_out_factor = 1 / zoom_in_factor
+        
+        if event.angleDelta().y() > 0:
+            zoom_factor = zoom_in_factor
+        else:
+            zoom_factor = zoom_out_factor
+            
+        self.scale(zoom_factor, zoom_factor)
+
+    def spawn_entity(self, uuid: str, x: int, y: int, color: str, name: str):
+        if uuid in self.entities:
+            self.move_entity(uuid, x, y)
+            return
+            
+        token = TokenItem(x, y, self.tile_size, color, name, uuid)
+        self.scene.addItem(token)
+        self.entities[uuid] = token
+        
+    def move_entity(self, uuid: str, x: int, y: int):
+        if uuid in self.entities:
+            self.entities[uuid].move_to_grid(x, y, self.tile_size)
+            
+    def remove_entity(self, uuid: str):
+        if uuid in self.entities:
+            token = self.entities.pop(uuid)
+            self.scene.removeItem(token)
 
     def mousePressEvent(self, event):
         """Handle right/left clicks to open contextual interaction menus."""
         if event.button() == Qt.MouseButton.RightButton or event.button() == Qt.MouseButton.LeftButton:
             scene_pos = self.mapToScene(event.pos())
-            vx_start = max(0, self.player_x - 10)
-            vy_start = max(0, self.player_y - 10)
-            
-            clicked_x = int(scene_pos.x() // self.tile_size) + vx_start
-            clicked_y = int(scene_pos.y() // self.tile_size) + vy_start
+            clicked_x = int(scene_pos.x() // self.tile_size)
+            clicked_y = int(scene_pos.y() // self.tile_size)
             
             self.show_context_menu(event.globalPosition().toPoint(), clicked_x, clicked_y)
         else:
             super().mousePressEvent(event)
             
     def show_context_menu(self, global_pos, gx, gy):
-        if not hasattr(self, 'current_battlemap'):
-            return
-            
         menu = QMenu(self)
         menu.setStyleSheet("QMenu { background-color: #333; color: white; border: 1px solid #555; } QMenu::item:selected { background-color: #555; }")
         
-        entities = self.current_battlemap.get("entities", [])
         clicked_entity = None
-        for ent in entities:
-            if ent.get("x") == gx and ent.get("y") == gy:
-                clicked_entity = ent
+        for uuid, token in self.entities.items():
+            tx = int(token.pos().x() // self.tile_size)
+            ty = int(token.pos().y() // self.tile_size)
+            if tx == gx and ty == gy:
+                clicked_entity = token
                 break
                 
         if clicked_entity:
-            name = clicked_entity.get("name", "Unknown")
-            personality = clicked_entity.get("personality", "Unknown")
-            
-            if personality.lower() == "hazard" or "trap" in name.lower():
-                menu.addAction(f"Interact with {name}", lambda: self._send_intent(f"interact with {name}"))
-                menu.addAction(f"Examine {name}", lambda: self._send_intent(f"examine {name}"))
-                menu.addAction(f"Pickup {name}", lambda: self._send_intent(f"pickup {name}"))
-            elif personality.lower() == "vendor":
-                menu.addAction(f"Trade with {name}", lambda: self._send_intent(f"trade with {name}"))
-                menu.addAction(f"Talk to {name}", lambda: self._send_intent(f"talk to {name}"))
-                menu.addAction(f"Examine {name}", lambda: self._send_intent(f"examine {name}"))
-                menu.addAction(f"Attack {name}", lambda: self._send_intent(f"attack {name}"))
-            else:
-                menu.addAction(f"Attack {name}", lambda: self._send_intent(f"attack {name}"))
-                menu.addAction(f"Talk to {name}", lambda: self._send_intent(f"talk to {name}"))
-                menu.addAction(f"Examine {name}", lambda: self._send_intent(f"examine {name}"))
+            name = clicked_entity.name
+            menu.addAction(f"Interact with {name}", lambda: self._send_intent(f"interact with {name}"))
+            menu.addAction(f"Examine {name}", lambda: self._send_intent(f"examine {name}"))
+            menu.addAction(f"Attack {name}", lambda: self._send_intent(f"attack {name}"))
         else:
             menu.addAction("Move Here", lambda: self._send_intent(f"move to {gx} {gy}"))
             menu.addAction("Examine Area", lambda: self._send_intent("examine area"))
@@ -242,16 +227,34 @@ class MapCanvas(QWidget):
         self.bus.subscribe("MAP_RENDER", self._on_map_render)
         self.bus.subscribe("HUD_UPDATE", self._on_hud_update)
         self.bus.subscribe("PLAYER_ACTION_UI_INJECT", self._handle_ui_inject)
+        
+        self.bus.subscribe("SPAWN_ENTITY", self._on_spawn_entity)
+        self.bus.subscribe("MOVE_ENTITY", self._on_move_entity)
+        self.bus.subscribe("REMOVE_ENTITY", self._on_remove_entity)
+
+    def _on_spawn_entity(self, payload):
+        self.battle_map.spawn_entity(
+            uuid=payload.get("uuid"),
+            x=payload.get("x", 0),
+            y=payload.get("y", 0),
+            color=payload.get("color", "red"),
+            name=payload.get("name", "Unknown")
+        )
+
+    def _on_move_entity(self, payload):
+        self.battle_map.move_entity(
+            uuid=payload.get("uuid"),
+            x=payload.get("x", 0),
+            y=payload.get("y", 0)
+        )
+
+    def _on_remove_entity(self, payload):
+        self.battle_map.remove_entity(payload.get("uuid"))
 
     def _on_map_render(self, payload):
-        battlemap_data = payload.get("battlemap")
-        px = payload.get("px", 50)
-        py = payload.get("py", 50)
-        cx = payload.get("cx", 0)
-        cy = payload.get("cy", 0)
-        self.title.setText(f"S.A.G.A. Engine VTT (Beta) [Cluster {cx},{cy}] [Local {px},{py}]")
-        if battlemap_data:
-            self.battle_map.load_matrix(battlemap_data, px, py)
+        # Kept for backward compatibility if we still want to read legacy grids,
+        # but the map handles its own infinite grid now.
+        pass
         
     def _on_hud_update(self, payload):
         if "character" in payload:

@@ -10,6 +10,7 @@ from beta_build.ai_services.llm_worker import LLMWorker
 from beta_build.audio.audio_manager import TTSWorker, STTWorker
 from beta_build.core.models import CharacterSheet
 from beta_build.ai_services.director import AIDirector
+from beta_build.data.memory_store import MemoryStore
 
 # --- Frontend Components ---
 from beta_build.ui.char_creation import CharacterCreationScreen
@@ -92,8 +93,10 @@ class SagaDesktopApp(QMainWindow):
         self.init_workers()
         
         # Core State
+        # Core State
         self.player_character = CharacterSheet(name="Wanderer")
         self.ai_director = AIDirector(load_model=False)
+        self.memory = MemoryStore()
 
     def init_workers(self):
         """Initializes and connects QThreads for background AI and audio tasks."""
@@ -126,11 +129,18 @@ class SagaDesktopApp(QMainWindow):
         self.map_canvas.log_view.append("\n<i>Narrator is thinking...</i>\n")
         self.map_canvas.log_view.append("<font color='#a0a0ff'>[NARRATOR]:</font> ")
         
-        # Use the actual AIDirector to generate a context-aware prompt
-        # Using placeholder context values until world generation is hooked up
+        # 1. Recall past memories related to the player's intent
+        past_memories = self.memory.recall_context(intent)
+        
+        # 2. Inject memories into the current context
+        current_context = "The player is standing in a dusty, ruined town square.\n"
+        if past_memories:
+            current_context += f"\n{past_memories}"
+            
+        # 3. Generate context-aware prompt
         prompt = self.ai_director.generate_llm_prompt(
             mechanical_result="The action resolves successfully.",
-            context="The player is standing in a dusty, ruined town square.",
+            context=current_context,
             intent_raw=intent
         )
         self.llm_worker.request_generation(prompt=prompt, tag="narrative")
@@ -147,6 +157,8 @@ class SagaDesktopApp(QMainWindow):
         # Feed the fully generated text to the TTS worker
         if full_text:
             self.tts_worker.speak(full_text)
+            # Store the final generated narrative into long-term memory
+            self.memory.store_event(text=full_text, metadata={"type": tag})
 
     def closeEvent(self, event):
         """Ensure threads are properly closed when shutting down."""

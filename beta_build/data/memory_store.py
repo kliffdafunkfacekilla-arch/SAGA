@@ -1,43 +1,78 @@
 import os
+import uuid
+import logging
 import chromadb
-from chromadb.config import Settings
+from typing import List, Dict, Any
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("MemoryStore")
 
 class MemoryStore:
     """
-    Manages long-term narrative memory using ChromaDB.
-    Enables RAG (Retrieval-Augmented Generation) for the Game Master.
+    Local Vector Database for the SAGA AI Director.
+    Stores and retrieves narrative events using semantic search (RAG).
     """
-    def __init__(self, db_path: str = "./runtime_data/vector_db"):
-        os.makedirs(db_path, exist_ok=True)
-        self.client = chromadb.PersistentClient(path=db_path)
+    def __init__(self, persist_directory: str = "saves/vector_db"):
+        # Ensure the save directory exists
+        os.makedirs(persist_directory, exist_ok=True)
         
-        # Collection for campaign narrative events
+        # Initialize the local persistent client
+        self.client = chromadb.PersistentClient(path=persist_directory)
+        
+        # Get or create the collection (cosine similarity works best for narrative matching)
         self.collection = self.client.get_or_create_collection(
-            name="campaign_memory",
+            name="saga_campaign_memory",
             metadata={"hnsw:space": "cosine"}
         )
+        logger.info(f"MemoryStore initialized successfully at: {persist_directory}")
 
-    def store_event(self, event_id: str, text: str, metadata: dict = None):
+    def store_event(self, text: str, metadata: Dict[str, Any] = None):
         """
-        Stores a piece of narrative history.
+        Saves a narrative chunk into the vector database.
+        Example metadata: {"session_id": "001", "location": "The Rusty Boar Tavern"}
         """
-        meta = metadata or {}
-        self.collection.add(
-            documents=[text],
-            metadatas=[meta],
-            ids=[event_id]
-        )
+        if not text or not text.strip():
+            return
 
-    def query_history(self, query: str, n_results: int = 3) -> list:
+        event_id = str(uuid.uuid4())
+        safe_metadata = metadata if metadata else {"type": "general_narrative"}
+
+        try:
+            self.collection.add(
+                documents=[text.strip()],
+                metadatas=[safe_metadata],
+                ids=[event_id]
+            )
+            logger.debug(f"Memory stored: {text[:40]}...")
+        except Exception as e:
+            logger.error(f"Failed to store memory: {e}")
+
+    def recall_context(self, query: str, n_results: int = 3) -> str:
         """
-        Retrieves the most relevant past events based on the current context query.
+        Searches the database for past events semantically similar to the query.
+        Returns a formatted string ready to be injected into the LLM prompt.
         """
-        results = self.collection.query(
-            query_texts=[query],
-            n_results=n_results
-        )
-        
-        if not results or not results['documents']:
-            return []
+        if not query or not query.strip():
+            return ""
+
+        try:
+            # Query the local vector DB
+            results = self.collection.query(
+                query_texts=[query],
+                n_results=n_results
+            )
             
-        return results['documents'][0]
+            # Extract documents
+            documents = results.get('documents', [[]])[0]
+            if not documents:
+                return ""
+            
+            # Format the output for the AI Director
+            recalled_text = "--- RELEVANT PAST EVENTS ---\n"
+            for doc in documents:
+                recalled_text += f"- {doc}\n"
+            return recalled_text
+
+        except Exception as e:
+            logger.error(f"Failed to recall memory: {e}")
+            return ""
