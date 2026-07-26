@@ -4,7 +4,6 @@ import json
 import glob
 import os
 import logging
-import math
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("WorldDBBuilder")

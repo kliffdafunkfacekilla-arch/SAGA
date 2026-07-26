@@ -1,6 +1,5 @@
 import logging
 import random
-from typing import Dict, Any, List
 
 logger = logging.getLogger("AnomalyResolver")
 
@@ -101,7 +100,7 @@ class AnomalyResolver:
         elif roll >= 2:
             log_string += f"[MUTAGENIC BACKFIRE] The spell FAILS. {caster} is mutated by raw Chaos!"
         else:
-            log_string += f"[THE TEAR] Natural 1. A hole is torn in Ostraka! A hostile Void Entity spills out!"
+            log_string += "[THE TEAR] Natural 1. A hole is torn in Ostraka! A hostile Void Entity spills out!"
             self.bus.publish("SPAWN_ENTITY", {"type": "void_entity"})
             
         self.bus.publish("ANOMALY_RESOLVED", {

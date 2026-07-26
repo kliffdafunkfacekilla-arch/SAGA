@@ -2,7 +2,6 @@ import os
 import uuid
 import logging
 import chromadb
-from typing import List, Dict, Any
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("MemoryStore")

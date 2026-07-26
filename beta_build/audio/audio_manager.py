@@ -1,7 +1,6 @@
 import pyttsx3
 import speech_recognition as sr
 from PyQt6.QtCore import QThread, pyqtSignal
-import asyncio
 import numpy as np
 from faster_whisper import WhisperModel
 

@@ -7,6 +7,7 @@ from PyQt6.QtCore import pyqtSlot
 # --- Beta Architecture ---
 from beta_build.ui.event_bus import EventBus
 from beta_build.ai_services.llm_worker import LLMWorker
+from beta_build.ai_services.director import AIDirector
 from beta_build.audio.audio_manager import TTSWorker, STTWorker
 from beta_build.core.models import CharacterSheet
 from beta_build.core.campaign_manager import CampaignManager
@@ -201,13 +202,20 @@ class SagaDesktopApp(QMainWindow):
         # Hook up the Pydantic character state to the UI HUD
         self.bus.publish("HUD_UPDATE", {"character": self.player_character.model_dump()})
         
-        # If payload contains map_data, we loaded from a save.
         if payload and payload.get("map_data"):
             self.map_canvas.log_view.append("<i><font color='#a0a0a0'>Engine resuming saved state...</font></i>\n")
             self.bus.publish("MAP_PAYLOAD_READY", payload.get("map_data"))
             return
             
         self.map_canvas.log_view.append("<i><font color='#a0a0a0'>Engine booting. The AI Game Master is designing the world...</font></i>\n")
+        
+        # 1. Generate the base map IMMEDIATELY so the user isn't staring at a blank screen
+        location = "Aloa"
+        # Set initial macro coordinates based on boot location
+        self.macro_x, self.macro_y = self.macro_simulator.get_burg_coords(location)
+            
+        self._pending_boot_location = location
+        self.bus.publish("GENERATE_SAFE_MAP", {"location": location})
         
     def _on_request_world_map(self, payload):
         self.bus.publish("UI_OPEN_WORLD_MAP", {
@@ -237,19 +245,6 @@ class SagaDesktopApp(QMainWindow):
         self._pending_boot_location = location_context
         
         self.bus.publish("TRAVEL_REQUESTED", {"location": location_context, "stats": stats})
-
-    def _show_game(self, payload):
-        """Displays the main Map Canvas."""
-        self.stack.setCurrentIndex(2)
-        
-        # 1. Generate the base map IMMEDIATELY so the user isn't staring at a blank screen
-        location = "Aloa"
-        if not payload.get("map_data"):
-            # Set initial macro coordinates based on boot location
-            self.macro_x, self.macro_y = self.macro_simulator.get_burg_coords(location)
-            
-        self._pending_boot_location = location
-        self.bus.publish("GENERATE_SAFE_MAP", {"location": location})
 
     def _on_save_game(self, payload):
         if not self.player_character: return

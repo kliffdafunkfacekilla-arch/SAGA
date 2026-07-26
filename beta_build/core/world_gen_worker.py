@@ -1,7 +1,6 @@
 import time
 import logging
 from PyQt6.QtCore import QThread, pyqtSignal
-from typing import Dict, Any
 
 from beta_build.core.world_gen import WorldGenerator
 

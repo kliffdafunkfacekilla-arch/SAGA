@@ -45,8 +45,6 @@ class ActionResolver:
         
         offense_stat = payload.get("offense_stat", 5)
         weapon_mod = payload.get("weapon_mod", 0)
-        
-        defense_stat = payload.get("defense_stat", 5)
         armor_mod = payload.get("armor_mod", 0)
         
         is_physical = payload.get("is_physical", True)
@@ -87,7 +85,7 @@ class ActionResolver:
             log_string += f"\nSkill Flavor: {flavor_text}\n"
 
         if margin < 0:
-            log_string += f"The attack missed or was completely absorbed!"
+            log_string += "The attack missed or was completely absorbed!"
             self._notify_hud_and_narrator(payload, 0, False, log_string, flavor_text, margin)
         elif margin == 0:
             # The 4-Way Clash Matrix simulation

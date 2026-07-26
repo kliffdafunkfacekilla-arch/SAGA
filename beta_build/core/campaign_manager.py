@@ -4,7 +4,6 @@ Manages the overarching Campaign Spine using a Storylet-based Directed Acyclic G
 """
 import json
 import logging
-import os
 from typing import Dict, Any
 
 logger = logging.getLogger("CampaignManager")

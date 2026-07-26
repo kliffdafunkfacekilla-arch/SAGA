@@ -2,7 +2,6 @@
 fov_calculator.py
 Provides Line of Sight (LoS) and Fog of War raycasting using Bresenham's line algorithm.
 """
-import math
 from typing import List, Dict, Set, Tuple
 
 def get_line(x0: int, y0: int, x1: int, y1: int) -> List[Tuple[int, int]]:

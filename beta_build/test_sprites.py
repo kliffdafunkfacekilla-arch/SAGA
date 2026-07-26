@@ -2,7 +2,6 @@ import sys
 from PyQt6.QtWidgets import QApplication
 from beta_build.ui.map_view import MapCanvas
 from beta_build.core.event_bus import EventBus
-import time
 
 app = QApplication(sys.argv)
 bus = EventBus()

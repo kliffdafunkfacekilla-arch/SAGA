@@ -1,7 +1,5 @@
-from PyQt6.QtGui import QPixmap, QColor, QPainter, QBrush, QPen
 from PyQt6.QtCore import Qt
 import os
-import glob
 
 import json
 

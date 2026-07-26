@@ -2,7 +2,6 @@ import logging
 import sqlite3
 import os
 import json
-from typing import Dict, Any
 
 logger = logging.getLogger("MacroSimulator")
 

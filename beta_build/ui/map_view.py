@@ -248,6 +248,7 @@ class BattleMapCanvas(QGraphicsView):
             for x, node in enumerate(row):
                 # node is a TerrainTile dict
                 # Get appropriate sprite
+                node_type = node.get("type", "floor")
                 if node_type == "wall":
                     pixmap = self.sprite_manager.get_sprite("stone_dark_0")
                 elif node_type == "obstacle":

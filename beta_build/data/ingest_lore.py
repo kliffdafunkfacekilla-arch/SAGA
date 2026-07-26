@@ -1,7 +1,5 @@
 import os
-import re
 import logging
-from typing import List, Dict
 
 # Assuming this script is run from the project root or SAGA directory
 import sys
