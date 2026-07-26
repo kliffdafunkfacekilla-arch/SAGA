@@ -544,6 +544,9 @@ class SagaDesktopApp(QMainWindow):
         self.map_canvas.log_view.append("\n")
         # Store the final generated narrative into long-term memory
         self.memory.store_event(text=full_text, metadata={"type": tag})
+        
+        # Theatrical Trigger: Execute all queued UI animations!
+        self.map_canvas._flush_animation_queue()
             
         self.bus.publish("END_TURN")
 

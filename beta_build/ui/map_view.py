@@ -3,8 +3,8 @@ Provides the MapCanvas and BattleMapCanvas components for the left-hand panel of
 """
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QTextEdit, QLineEdit, QGraphicsView, 
-                             QGraphicsScene, QMenu, QGraphicsEllipseItem, QGraphicsItem, QGraphicsTextItem, QGraphicsRectItem, QGraphicsPixmapItem)
-from PyQt6.QtCore import Qt, pyqtSlot, QRectF, QTimer
+                             QGraphicsScene, QMenu, QGraphicsEllipseItem, QGraphicsItem, QGraphicsTextItem, QGraphicsRectItem, QGraphicsPixmapItem, QGraphicsObject)
+from PyQt6.QtCore import Qt, pyqtSlot, QRectF, QTimer, QSequentialAnimationGroup, QPropertyAnimation, pyqtProperty, QPointF
 from PyQt6.QtGui import QBrush, QColor, QPen, QPainter
 
 from beta_build.ui.sprite_manager import SpriteManager
@@ -26,14 +26,15 @@ class LootItem(QGraphicsEllipseItem):
         self.label.setPos(-10, -15)
         self.setZValue(1) # Under players, above dead bodies
 
-class TokenItem(QGraphicsPixmapItem):
+class TokenItem(QGraphicsObject):
     """Dynamic map token representing an entity (player, monster, etc)."""
     def __init__(self, x, y, size, pixmap, name, uuid, tags=None, parent=None):
-        super().__init__(pixmap, parent)
+        super().__init__(parent)
         self.setPos(x * size, y * size)
         self.uuid = uuid
         self.name = name
         self.tags = tags or []
+        self._pixmap = pixmap
         
         # Add label for name
         self.label = QGraphicsTextItem(name, self)
@@ -43,6 +44,20 @@ class TokenItem(QGraphicsPixmapItem):
         
         self.is_dead = False
         self.setZValue(1)
+
+    def boundingRect(self):
+        return QRectF(self._pixmap.rect())
+
+    def paint(self, painter, option, widget=None):
+        painter.drawPixmap(0, 0, self._pixmap)
+
+    @pyqtProperty(QPointF)
+    def pos_anim(self):
+        return self.pos()
+
+    @pos_anim.setter
+    def pos_anim(self, val):
+        self.setPos(val)
 
     def move_to_grid(self, x, y, size):
         if not self.is_dead:
@@ -313,6 +328,8 @@ class MapCanvas(QWidget):
     def __init__(self, bus):
         super().__init__()
         self.bus = bus
+        self.animation_queue = []
+        self.animation_group = QSequentialAnimationGroup(self)
         
         main_layout = QHBoxLayout()
         left_layout = QVBoxLayout()
@@ -418,17 +435,57 @@ class MapCanvas(QWidget):
             self.bus.publish("SCENE_STABILIZED", {})
 
     def _on_move_entity(self, payload):
-        self.battle_map.move_entity(
-            uuid=payload.get("uuid"),
-            x=payload.get("x", 0),
-            y=payload.get("y", 0)
-        )
+        self.animation_queue.append({"type": "move", "payload": payload})
 
     def _on_remove_entity(self, payload):
         self.battle_map.remove_entity(payload.get("uuid"))
 
     def _on_entity_damaged(self, payload):
-        self.battle_map.damage_entity(payload.get("uuid"))
+        self.animation_queue.append({"type": "damage", "payload": payload})
+        
+    def _flush_animation_queue(self):
+        self.animation_group.clear()
+        
+        for action in self.animation_queue:
+            if action["type"] == "move":
+                payload = action["payload"]
+                uuid = payload.get("uuid")
+                
+                # Enemy AI currently passes dx/dy instead of x/y sometimes? Wait. 
+                # Enemy AI passes new_x and new_y actually, let's check payload. Oh, enemy AI uses 'dx' and 'dy' in payload for move relative? Wait, let's use absolute x,y if available, else derive.
+                # Actually, enemy AI emits dx, dy. But we need absolute for move_entity?
+                # Actually _on_move_entity above used `payload.get("x", 0)`.
+                x = payload.get("x", 0)
+                y = payload.get("y", 0)
+                if "dx" in payload and "x" not in payload:
+                    if uuid in self.battle_map.entities:
+                        token = self.battle_map.entities[uuid]
+                        x = int(token.pos().x() // self.battle_map.tile_size) + payload["dx"]
+                        y = int(token.pos().y() // self.battle_map.tile_size) + payload["dy"]
+                
+                if uuid in self.battle_map.entities:
+                    token = self.battle_map.entities[uuid]
+                    anim = QPropertyAnimation(token, b"pos_anim")
+                    anim.setDuration(300)
+                    anim.setStartValue(token.pos())
+                    anim.setEndValue(QPointF(x * self.battle_map.tile_size, y * self.battle_map.tile_size))
+                    self.animation_group.addAnimation(anim)
+                    
+                    # We need to run the logic after the animation finishes. We can use a lambda connected to the animation's finished signal, but since it's sequential, a QTimer singleShot won't work well.
+                    # We can use QPropertyAnimation to just move it, and when the whole group finishes, we sync the FOV and positions.
+                    anim.finished.connect(lambda u=uuid, nx=x, ny=y: self.battle_map.move_entity(u, nx, ny))
+                    
+            elif action["type"] == "damage":
+                payload = action["payload"]
+                uuid = payload.get("uuid")
+                if uuid in self.battle_map.entities:
+                    token = self.battle_map.entities[uuid]
+                    # Since flash_damage uses QTimer, we can just call it when the sequence reaches it? 
+                    # Actually, we can just flash them all at the end, or use a dummy pause animation
+                    token.flash_damage()
+                    
+        self.animation_queue.clear()
+        self.animation_group.start()
         
     def _on_entity_died(self, payload):
         self.battle_map.kill_entity(payload.get("uuid"), payload.get("loot_data"))
