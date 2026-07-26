@@ -20,11 +20,13 @@ class WorldGenWorker(QThread):
         self._is_running = True
         self._pending_location = None
         self._pending_ambush = False
+        self._pending_dynamic_entities = None
 
-    def request_generation(self, location_name: str, is_ambush: bool = False):
+    def request_generation(self, location_name: str, is_ambush: bool = False, dynamic_entities: list = None):
         """Queue a location for map generation."""
         self._pending_location = location_name
         self._pending_ambush = is_ambush
+        self._pending_dynamic_entities = dynamic_entities
 
     def run(self):
         """Main loop of the worker thread."""
@@ -33,12 +35,14 @@ class WorldGenWorker(QThread):
             if self._pending_location:
                 loc = self._pending_location
                 is_ambush = self._pending_ambush
+                dynamic_entities = self._pending_dynamic_entities
                 self._pending_location = None
                 self._pending_ambush = False
+                self._pending_dynamic_entities = None
                 
                 try:
                     logger.info(f"Generating map for {loc} (Ambush: {is_ambush})...")
-                    payload = self.world_gen.generate_local_map(loc, is_ambush=is_ambush)
+                    payload = self.world_gen.generate_local_map(loc, is_ambush=is_ambush, dynamic_entities=dynamic_entities)
                     self.map_ready.emit(payload)
                 except Exception as e:
                     logger.error(f"Error generating map: {e}")

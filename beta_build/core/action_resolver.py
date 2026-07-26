@@ -2,6 +2,8 @@ import logging
 import random
 from typing import Dict, Any
 
+from beta_build.core.skills_data import get_skill_flavor
+
 logger = logging.getLogger("ActionResolver")
 
 class ActionResolver:
@@ -29,13 +31,18 @@ class ActionResolver:
         defender_tags = payload.get("defender_tags", [])
         cover_bonus = payload.get("cover_bonus", 0)
         
+        # Tactical Equation
+        technique = payload.get("technique", "Strike")
+        effort = payload.get("effort", 1)
+        effort_pool = "Stamina" if is_physical else "Focus"
+        
         # Apply terrain/tag logic
         if "cover" in defender_tags and is_physical:
             armor_mod += cover_bonus
             
-        # Roll the dice
-        att_roll = random.randint(1, 20)
-        def_roll = random.randint(1, 20)
+        # Roll the dice (1d12 system)
+        att_roll = random.randint(1, 12)
+        def_roll = random.randint(1, 12)
         
         att_total = att_roll + offense_stat + weapon_mod
         def_total = def_roll + defense_stat + armor_mod
@@ -43,36 +50,89 @@ class ActionResolver:
         margin = att_total - def_total
         
         # Formatting narrative string
-        damage_type = "Physical Damage" if is_physical else "Mental Damage"
+        damage_type = "Physical" if is_physical else "Mental"
         
-        log_string = f"{attacker} rolled {att_total} (d20:{att_roll} + Stat:{offense_stat} + Mod:{weapon_mod}). "
+        log_string = f"{attacker} used {technique} (Effort: {effort} {effort_pool}).\n"
+        log_string += f"{attacker} rolled {att_total} (d12:{att_roll} + Stat:{offense_stat} + Mod:{weapon_mod}). "
         if "cover" in defender_tags and is_physical:
-            log_string += f"{defender} rolled {def_total} (d20:{def_roll} + Stat:{defense_stat} + Mod:{armor_mod} [includes +{cover_bonus} Cover]). "
+            log_string += f"{defender} rolled {def_total} (d12:{def_roll} + Stat:{defense_stat} + Mod:{armor_mod} [includes +{cover_bonus} Cover]). "
         else:
-            log_string += f"{defender} rolled {def_total} (d20:{def_roll} + Stat:{defense_stat} + Mod:{armor_mod}). "
+            log_string += f"{defender} rolled {def_total} (d12:{def_roll} + Stat:{defense_stat} + Mod:{armor_mod}). "
         
-        if margin <= 0:
+        flavor_text = get_skill_flavor(technique)
+        if flavor_text:
+            log_string += f"\nSkill Flavor: {flavor_text}\n"
+
+        if margin < 0:
             log_string += f"The attack missed or was completely absorbed!"
-            self._notify_hud_and_narrator(payload, 0, False, log_string)
-        elif 1 <= margin <= 4:
-            log_string += f"{attacker} hits {defender} for {margin} {damage_type}!"
-            self._notify_hud_and_narrator(payload, margin, False, log_string)
-        else:
-            log_string += f"CRITICAL STRIKE! {attacker} hits {defender} for {margin} {damage_type}, inflicting a Trauma Token!"
-            self._notify_hud_and_narrator(payload, margin, True, log_string)
+            self._notify_hud_and_narrator(payload, 0, False, log_string, flavor_text, margin)
+        elif margin == 0:
+            # The 4-Way Clash Matrix simulation
+            tactics = ["PRESS", "DISENGAGE", "MANEUVER", "FEINT"]
+            att_tactic = random.choice(tactics)
+            def_tactic = random.choice(tactics)
             
-    def _notify_hud_and_narrator(self, payload, damage, trauma, log_string):
+            clash_att = random.randint(1, 12) + offense_stat + weapon_mod
+            clash_def = random.randint(1, 12) + defense_stat + weapon_mod # Assuming defender weapon mod
+            
+            clash_winner = attacker if clash_att >= clash_def else defender
+            clash_loser = defender if clash_att >= clash_def else attacker
+            winning_tactic = att_tactic if clash_att >= clash_def else def_tactic
+            
+            log_string += f"EXACT TIE! A Clash occurs! Both lose 1 {effort_pool}.\n"
+            log_string += f"{attacker} chose {att_tactic}, {defender} chose {def_tactic}.\n"
+            log_string += f"{clash_winner} wins the clash using {winning_tactic}!"
+            
+            if winning_tactic == "PRESS":
+                log_string += f" {clash_winner} pushes {clash_loser} back 1 Zone. {clash_loser} is Prone!"
+            elif winning_tactic == "DISENGAGE":
+                log_string += f" {clash_winner} steps back. {clash_loser} is Staggered!"
+            elif winning_tactic == "MANEUVER":
+                log_string += f" Combatants swap Zones. {clash_loser} suffers Minor Injury + Bleed and is Confused!"
+            elif winning_tactic == "FEINT":
+                log_string += f" Combatants lock weapons. {clash_loser} is Disarmed and Vulnerable!"
+            
+            self.bus.publish("COMBAT_CLASH", {"attacker": attacker, "defender": defender, "log": log_string})
+            self._notify_hud_and_narrator(payload, 0, False, log_string, flavor_text, margin)
+        else:
+            # Threshold Engine
+            threshold = defense_stat if defense_stat > 0 else 1
+            
+            capacity_dmg = 0
+            is_trauma = False
+            
+            if margin < threshold:
+                log_string += f"{attacker} hits! Minor {damage_type} Injury. (-1 Capacity)."
+                capacity_dmg = 1
+            elif margin >= (2 * threshold):
+                perm_loss = "Limb/Mutation" if is_physical else "Mind-Fracture"
+                log_string += f"APOCALYPTIC CRITICAL! {attacker} shatters {defender}! Critical {damage_type} Injury! (-5 Capacity, Permanent Loss: {perm_loss}, Staggered)."
+                capacity_dmg = 5
+                is_trauma = True
+            elif margin >= threshold:
+                penalty = "Bleeding/Hobbled" if is_physical else "Shaken/Confused"
+                log_string += f"DEVASTATING BLOW! {attacker} breaches {defender}'s threshold! Major {damage_type} Injury! (-3 Capacity, Persistent Penalty: {penalty})."
+                capacity_dmg = 3
+                is_trauma = True
+                
+            self._notify_hud_and_narrator(payload, capacity_dmg, is_trauma, log_string, flavor_text, margin)
+            
+    def _notify_hud_and_narrator(self, payload, damage, trauma, log_string, flavor_text, margin):
         logger.info(log_string)
         
         target = payload.get("defender")
         
         # We bounce this event to the UI so it can apply damage if the target is the player
         self.bus.publish("COMBAT_RESOLVED", {
+            "attacker": payload.get("attacker"),
             "target": target,
             "damage": damage,
             "trauma": trauma,
             "is_physical": payload.get("is_physical", True),
-            "log": log_string
+            "log": log_string,
+            "intent_raw": payload.get("intent_raw", ""),
+            "action_flavor": flavor_text,
+            "margin": margin
         })
         
         # Visual Map Events

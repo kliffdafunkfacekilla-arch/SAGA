@@ -12,7 +12,10 @@ class Item(BaseModel):
     """
     name: str
     item_type: str
+    gear_category: str = "generic"
     stat_type: str
+    scaling_stat_primary: str = ""
+    scaling_stat_secondary: str = ""
     modifier: int = 0
     loadout_cost: int = 0
     armor_mod: int = 0
@@ -82,9 +85,19 @@ class CharacterSheet(BaseModel):
     unspent_stat_points: int = 0
     unspent_skill_points: int = 0
     
+    # Trauma & Conditions
     trauma_tokens: int = 0
     is_stabilized: bool = True
     has_disadvantage: bool = False
+    adrenaline_shock: bool = False
+    bleed_stacks: int = 0
+    chaos_ticks: int = 0
+    injury_tallies: List[str] = Field(default_factory=list)
+    
+    # Action Economy (The 3-Beat Pulse)
+    active_move_beats: int = 1
+    active_stamina_beats: int = 1
+    active_focus_beats: int = 1
     
     # Derived pools
     max_hp: int = 15
@@ -114,6 +127,23 @@ class CharacterSheet(BaseModel):
         
         return self
 
+    # --- Tactical Sub-Stats ---
+    @property
+    def perception_substat(self) -> int:
+        return (2 * (self.stats.get("awareness", 0) + self.stats.get("logic", 0)) + self.stats.get("vitality", 0)) // 3
+
+    @property
+    def movement_substat(self) -> int:
+        return (2 * (self.stats.get("reflexes", 0) + self.stats.get("might", 0)) + self.stats.get("intuition", 0)) // 3
+
+    @property
+    def balance_substat(self) -> int:
+        return (2 * (self.stats.get("endurance", 0) + self.stats.get("fortitude", 0)) + self.stats.get("willpower", 0)) // 3
+
+    @property
+    def stealth_substat(self) -> int:
+        return (2 * (self.stats.get("knowledge", 0) + self.stats.get("charm", 0)) + self.stats.get("finesse", 0)) // 3
+
     def take_damage(self, amount: int, is_physical: bool = True):
         if amount <= 0:
             return
@@ -122,10 +152,55 @@ class CharacterSheet(BaseModel):
             self.current_hp -= amount
             if self.current_hp <= 0:
                 self.current_hp = 0
+                if self.is_zero_state and (self.bleed_stacks > 0 or "drain" in self.tags):
+                    if "dead" not in self.tags: self.tags.append("dead")
                 self.is_zero_state = True
         else:
             self.current_composure -= amount
             if self.current_composure <= 0:
                 self.current_composure = 0
+                if self.is_zero_state and (self.chaos_ticks > 0 or "drain" in self.tags):
+                    if "dead" not in self.tags: self.tags.append("dead")
                 self.is_zero_state = True
 
+    def desperate_rally(self):
+        """Consume a beat to force an incapacitated character to burn remaining reserves."""
+        if self.is_zero_state and (self.active_move_beats > 0 or self.active_stamina_beats > 0 or self.active_focus_beats > 0):
+            # Consume 1 beat of any type
+            if self.active_move_beats > 0:
+                self.active_move_beats -= 1
+            elif self.active_stamina_beats > 0:
+                self.active_stamina_beats -= 1
+            elif self.active_focus_beats > 0:
+                self.active_focus_beats -= 1
+                
+            # Restore 1 capacity point
+            if self.current_hp <= 0:
+                self.current_hp = 1
+            if self.current_composure <= 0:
+                self.current_composure = 1
+            self.is_zero_state = False
+
+    def consume_anomaly_cost(self, move_beats: int, focus_beats: int, stamina_beats: int, focus_cost: int, stamina_cost: int) -> bool:
+        """Attempts to consume costs for an anomaly. Returns True if successful, False if insufficient."""
+        if (self.active_move_beats < move_beats or 
+            self.active_focus_beats < focus_beats or 
+            self.active_stamina_beats < stamina_beats or
+            self.active_focus < focus_cost or 
+            self.active_stamina < stamina_cost):
+            return False
+            
+        self.active_move_beats -= move_beats
+        self.active_focus_beats -= focus_beats
+        self.active_stamina_beats -= stamina_beats
+        self.active_focus -= focus_cost
+        self.active_stamina -= stamina_cost
+        return True
+        
+    def permanently_reduce_max_stamina(self, amount: int):
+        """Used by the Channeling Chaos Friction effect."""
+        self.max_stamina -= amount
+        if self.max_stamina < 0:
+            self.max_stamina = 0
+        if self.active_stamina > self.max_stamina:
+            self.active_stamina = self.max_stamina

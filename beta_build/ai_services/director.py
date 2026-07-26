@@ -132,13 +132,15 @@ class AIDirector:
             
         return raw_text
 
-    def generate_llm_prompt(self, mechanical_result: str, context: str, intent_raw: str = None, filters: str = "") -> str:
+    def generate_llm_prompt(self, mechanical_result: str, context: str, intent_raw: str = None, action_flavor: str = None, filters: str = "") -> str:
         action_directive = ""
         if intent_raw:
             if "talk to" in intent_raw.lower():
                 action_directive = f"The player's action is: '{intent_raw}'. CRITICAL: Generate the NPC's direct spoken dialogue in quotes, responding in character. Do not just describe the scene.\n"
             else:
                 action_directive = f"The player's action is: '{intent_raw}'.\n"
+                
+        flavor_directive = f"ACTION FLAVOR (Lore/Visuals): {action_flavor}\n" if action_flavor else ""
                 
         full_prompt = (
             f"<|system|>\n{self.system_prompt}\n"
@@ -147,7 +149,8 @@ class AIDirector:
             f"<|user|>\n"
             f"Context & World State:\n{context}\n\n"
             f"Mechanical Result / Action Resolution:\n{mechanical_result}\n"
-            f"Player Intent: {intent_raw if intent_raw else 'Observing'}\n\n"
+            f"Player Intent: {intent_raw if intent_raw else 'Observing'}\n"
+            f"{flavor_directive}\n"
             f"CRITICAL DIRECTIVE:\n"
             f"1. Describe the outcome of the player's action concisely.\n"
             f"2. INTERACTIVITY: Seamlessly weave 1 to 3 interactive points of interest (an NPC, an object, a path) into your prose. Do NOT list them with bullet points or numbers.\n"

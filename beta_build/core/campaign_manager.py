@@ -20,6 +20,7 @@ class CampaignManager:
         self.remaining_dynamic_slots = 0
         
         self.bus.subscribe("LOAD_CAMPAIGN", self._on_load_campaign)
+        self.bus.subscribe("INITIATE_BOOT_SEQUENCE", self._on_initiate_boot)
         self.bus.subscribe("RESOLVE_DYNAMIC_SLOT", self._on_resolve_dynamic_slot)
         self.bus.subscribe("REQUEST_SEEDS", self._on_request_seeds)
         
@@ -36,11 +37,29 @@ class CampaignManager:
                     
             logger.info(f"Loaded campaign: {self.campaign_data.get('campaign_name')}")
             
-            # Start at intro_01
-            self._transition_to_node("intro_01")
+            # We DO NOT transition to node yet. Boot sequence must finish first.
             
         except Exception as e:
             logger.error(f"Failed to load campaign {filepath}: {e}")
+            
+    def _on_initiate_boot(self, payload: Dict[str, Any]):
+        location = payload.get("location", "Aloa")
+        prompt = (
+            f"You are the Game Master starting a new campaign in {location}. "
+            "Write a rich, immersive opening narrative for the players in 'narrative_prose'. "
+            "Then, define the initial world state and entities to populate the map in 'world_updates'. "
+            "You MUST return a raw JSON object with the following structure:\n"
+            "{\n"
+            '  "narrative_prose": "Welcome to the Wastes. The dusty wind howls...",\n'
+            '  "world_updates": {\n'
+            '    "environment": "dusty town square",\n'
+            '    "entities": [\n'
+            '      {"name": "Local Merchant", "sprite": "vendor", "tags": ["humanoid", "civilian"]}\n'
+            '    ]\n'
+            '  }\n'
+            "}"
+        )
+        self.bus.publish("EXECUTE_AI_INTENT", {"intent": prompt, "system_prompt": True, "tag": "boot_sequence", "location": location})
             
     def _transition_to_node(self, node_id: str):
         if node_id not in self.nodes:
@@ -63,7 +82,12 @@ class CampaignManager:
         self.bus.publish("SYSTEM_LOG", {"message": log_str})
         
         # Force the AI Director to narrate the new campaign node
-        intent_prompt = f"The campaign has entered a new phase: {title}. Description: {desc}. Narrate this setup dramatically."
+        intent_prompt = (
+            f"[NARRATIVE INTRO]: The campaign has entered a new phase: '{title}'. "
+            f"Context: {desc}. "
+            f"You are the Game Master. Write a rich, atmospheric opening paragraph setting the scene for the players. "
+            f"Describe the environment, the weather, and what they see. Do not write their actions."
+        )
         self.bus.publish("EXECUTE_AI_INTENT", {"intent": intent_prompt})
         
     def _on_resolve_dynamic_slot(self, payload: Dict[str, Any]):
