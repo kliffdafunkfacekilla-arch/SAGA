@@ -95,83 +95,91 @@ ORIGINS = {
     }
 }
 
-SKILL_TRACKS = {
-    # --- MIGHT ---
-    "Heavy_Weaponry": {"name": "Heavy Weaponry", "category": "Offense", "stat_bonus": "might", "stat_penalty": "reflexes", "description": "Utilizes massive weapons to crush armor and bone."},
-    "Bracing": {"name": "Bracing", "category": "Defense", "stat_bonus": "might", "stat_penalty": "finesse", "description": "Uses sheer physical mass to stop attacks dead in their tracks."},
-    "Athletics": {"name": "Athletics", "category": "Utility", "stat_bonus": "might", "stat_penalty": "knowledge", "description": "Feats of raw strength, climbing, and lifting."},
-    "School_of_Mass": {"name": "Mass", "category": "Magic", "stat_bonus": "might", "stat_penalty": "finesse", "description": "Manipulation of gravity and physical density."},
-    
-    # --- REFLEXES ---
-    "Ranged_Weaponry": {"name": "Ranged Weaponry", "category": "Offense", "stat_bonus": "reflexes", "stat_penalty": "fortitude", "description": "Mastery of bows, thrown weapons, and quick shots."},
-    "Unarmored_Evasion": {"name": "Evasion", "category": "Defense", "stat_bonus": "reflexes", "stat_penalty": "endurance", "description": "Dodging attacks through pure speed and flexibility."},
-    "Acrobatics": {"name": "Acrobatics", "category": "Utility", "stat_bonus": "reflexes", "stat_penalty": "logic", "description": "Tumbling, balancing, and performing complex maneuvers."},
-    "School_of_Motus": {"name": "Motus", "category": "Magic", "stat_bonus": "reflexes", "stat_penalty": "vitality", "description": "Control over velocity, acceleration, and kinetic energy."},
-    
-    # --- FINESSE ---
-    "Precision_Weaponry": {"name": "Precision Weaponry", "category": "Offense", "stat_bonus": "finesse", "stat_penalty": "might", "description": "Surgical strikes using daggers, rapiers, and firearms."},
-    "Parrying": {"name": "Parrying", "category": "Defense", "stat_bonus": "finesse", "stat_penalty": "fortitude", "description": "Deflecting incoming attacks with precision timing."},
-    "Sleight_of_Hand": {"name": "Sleight of Hand", "category": "Utility", "stat_bonus": "finesse", "stat_penalty": "willpower", "description": "Picking locks, disarming small traps, and theft."},
-    "School_of_Flux": {"name": "Flux", "category": "Magic", "stat_bonus": "finesse", "stat_penalty": "endurance", "description": "Phase shifting, liquids, and alteration."},
-    
-    # --- ENDURANCE ---
-    "Brawling": {"name": "Brawling", "category": "Offense", "stat_bonus": "endurance", "stat_penalty": "finesse", "description": "Unarmed combat built on outlasting the opponent."},
-    "Medium_Armor": {"name": "Medium Armor", "category": "Defense", "stat_bonus": "endurance", "stat_penalty": "reflexes", "description": "Mastery of chainmail and thick hides."},
-    "Survival": {"name": "Survival", "category": "Utility", "stat_bonus": "endurance", "stat_penalty": "charm", "description": "Enduring harsh environments and foraging."},
-    "School_of_Ordo": {"name": "Ordo", "category": "Magic", "stat_bonus": "endurance", "stat_penalty": "intuition", "description": "Stasis, preservation, and nullification of chaos."},
-    
-    # --- FORTITUDE ---
-    "Shield_Bashing": {"name": "Shield Bashing", "category": "Offense", "stat_bonus": "fortitude", "stat_penalty": "reflexes", "description": "Using heavy shields offensively to control space."},
-    "Heavy_Armor": {"name": "Ironclad", "category": "Defense", "stat_bonus": "fortitude", "stat_penalty": "awareness", "description": "Mastery of heavy plating and natural carapaces to absorb blows."},
-    "Intimidation": {"name": "Intimidation", "category": "Utility", "stat_bonus": "fortitude", "stat_penalty": "charm", "description": "Projecting an aura of undeniable physical threat."},
-    "School_of_Lex": {"name": "Lex", "category": "Magic", "stat_bonus": "fortitude", "stat_penalty": "intuition", "description": "The imposition of absolute rules and unbreakable physical barriers."},
-    
-    # --- VITALITY ---
-    "Blood_Sacrifice": {"name": "Blood Sacrifice", "category": "Offense", "stat_bonus": "vitality", "stat_penalty": "logic", "description": "Expending one's own lifeforce to empower strikes."},
-    "Regeneration": {"name": "Regeneration", "category": "Defense", "stat_bonus": "vitality", "stat_penalty": "knowledge", "description": "Rapidly closing wounds during the heat of battle."},
-    "Biological_Resistance": {"name": "Biological Resistance", "category": "Utility", "stat_bonus": "vitality", "stat_penalty": "awareness", "description": "Natural immunity to poisons, diseases, and toxins."},
-    "School_of_Vita": {"name": "Vita", "category": "Magic", "stat_bonus": "vitality", "stat_penalty": "logic", "description": "Biomancy, healing, and flesh-warping."},
-    
-    # --- LOGIC ---
-    "Tactical_Gadgets": {"name": "Tactical Gadgets", "category": "Offense", "stat_bonus": "logic", "stat_penalty": "vitality", "description": "Deploying traps, bombs, and mechanical devices."},
-    "Trap_Disarming": {"name": "Trap Disarming", "category": "Defense", "stat_bonus": "logic", "stat_penalty": "might", "description": "Methodical deconstruction of hazards and explosives."},
-    "Engineering": {"name": "Engineering", "category": "Utility", "stat_bonus": "logic", "stat_penalty": "charm", "description": "Building, repairing, and analyzing machinery."},
-    "School_of_Ratio": {"name": "Ratio", "category": "Magic", "stat_bonus": "logic", "stat_penalty": "intuition", "description": "Geometric constructs and pure calculation."},
-    
-    # --- KNOWLEDGE ---
-    "Rune_Strikes": {"name": "Rune Strikes", "category": "Offense", "stat_bonus": "knowledge", "stat_penalty": "might", "description": "Using ancient inscribed runes to detonate elements."},
-    "Counter_Lore": {"name": "Counter Lore", "category": "Defense", "stat_bonus": "knowledge", "stat_penalty": "fortitude", "description": "Identifying and unravelling enemy techniques."},
-    "Artifact_Lore": {"name": "Artifact Lore", "category": "Utility", "stat_bonus": "knowledge", "stat_penalty": "endurance", "description": "Identifying artifacts, reading ancient texts, and historical knowledge."},
-    "School_of_Nexus": {"name": "Nexus", "category": "Magic", "stat_bonus": "knowledge", "stat_penalty": "awareness", "description": "Portals, summoning, and planar gates."},
-    
-    # --- AWARENESS ---
-    "Sniper": {"name": "Sniper", "category": "Offense", "stat_bonus": "awareness", "stat_penalty": "fortitude", "description": "Exploiting blind spots for massive ambush damage."},
-    "Precognitive_Defense": {"name": "Precognitive Defense", "category": "Defense", "stat_bonus": "awareness", "stat_penalty": "vitality", "description": "Sensing ambushes and predicting trajectories."},
-    "Tracking": {"name": "Tracking", "category": "Utility", "stat_bonus": "awareness", "stat_penalty": "logic", "description": "Following trails, spotting hidden objects, and acute senses."},
-    "School_of_Aura": {"name": "Aura", "category": "Magic", "stat_bonus": "awareness", "stat_penalty": "endurance", "description": "True sight, divination, and energy reading."},
-    
-    # --- INTUITION ---
-    "Improvised_Weapons": {"name": "Improvised Weapons", "category": "Offense", "stat_bonus": "intuition", "stat_penalty": "logic", "description": "Using the environment and unpredictable tactics to strike."},
-    "Danger_Sense": {"name": "Danger Sense", "category": "Defense", "stat_bonus": "intuition", "stat_penalty": "knowledge", "description": "A gut feeling that naturally guides you away from harm."},
-    "Insight": {"name": "Insight", "category": "Utility", "stat_bonus": "intuition", "stat_penalty": "willpower", "description": "Reading emotions, sensing lies, and street-smarts."},
-    "School_of_Omen": {"name": "Omen", "category": "Magic", "stat_bonus": "intuition", "stat_penalty": "logic", "description": "Probability manipulation, fate, and luck."},
-    
-    # --- WILLPOWER ---
-    "Force_of_Will": {"name": "Force of Will", "category": "Offense", "stat_bonus": "willpower", "stat_penalty": "finesse", "description": "Projecting sheer force of personality to stagger foes."},
-    "Mental_Resistance": {"name": "Mental Resistance", "category": "Defense", "stat_bonus": "willpower", "stat_penalty": "reflexes", "description": "Resisting fear, mind control, and illusions."},
-    "Interrogation": {"name": "Interrogation", "category": "Utility", "stat_bonus": "willpower", "stat_penalty": "charm", "description": "Breaking down suspects and forcing the truth."},
-    "School_of_Anumis": {"name": "Anumis", "category": "Magic", "stat_bonus": "willpower", "stat_penalty": "vitality", "description": "Telepathy, mind domination, and psychic force."},
-    
-    # --- CHARM ---
-    "Commands": {"name": "Commands", "category": "Offense", "stat_bonus": "charm", "stat_penalty": "endurance", "description": "Directing companions or intimidating enemies into submission."},
-    "Distraction": {"name": "Distraction", "category": "Defense", "stat_bonus": "charm", "stat_penalty": "awareness", "description": "Using feints and banter to throw enemies off-balance."},
-    "Negotiation": {"name": "Negotiation", "category": "Utility", "stat_bonus": "charm", "stat_penalty": "fortitude", "description": "Bartering, diplomacy, and persuasion."},
-    "School_of_Lux": {"name": "Lux", "category": "Magic", "stat_bonus": "charm", "stat_penalty": "knowledge", "description": "Radiance, illusion, and blinding presence."}
-}
-
 TIER_SCALING = {
     1: "Novice: Single target, touch or adjacent range. Minor effect.",
     4: "Adept: Up to 3 targets, 15ft range/arc. Moderate effect.",
     7: "Master: Up to 6 targets, 30ft area of effect, sustained duration.",
     10: "Divine: City-block scope, permanent environmental alteration, massive collateral damage."
+}
+
+SKILL_TRACKS = {
+    # ==========================================
+    # BODY STATS (Physical Manifestation)
+    # ==========================================
+    
+    # --- MIGHT ---
+    "Might_Offense": {"name": "The Berserker", "category": "Offense", "stat_bonus": "might", "stat_penalty": "reflexes", "description": "Heavy/Crushing weapons. Cleaving through targets and shattering armor."},
+    "Might_Defense": {"name": "The Parrier", "category": "Defense", "stat_bonus": "might", "stat_penalty": "finesse", "description": "Deflecting heavy blows by actively striking the enemy's weapon away."},
+    "Might_Magic": {"name": "School of Mass", "category": "Magic", "stat_bonus": "might", "stat_penalty": "logic", "description": "Manipulation of gravity, physical density, and kinetic force."},
+    "Might_Utility": {"name": "Athletics", "category": "Utility", "stat_bonus": "might", "stat_penalty": "charm", "description": "Feats of raw strength, climbing, lifting, and breaking restraints."},
+
+    # --- REFLEXES ---
+    "Reflexes_Offense": {"name": "The Sniper", "category": "Offense", "stat_bonus": "reflexes", "stat_penalty": "fortitude", "description": "Bows/Thrown weapons. Extreme range and mobility-based skirmishing."},
+    "Reflexes_Defense": {"name": "The Acrobat", "category": "Defense", "stat_bonus": "reflexes", "stat_penalty": "endurance", "description": "Unarmored Evasion. Dodging attacks completely and repositioning freely."},
+    "Reflexes_Magic": {"name": "School of Motus", "category": "Magic", "stat_bonus": "reflexes", "stat_penalty": "willpower", "description": "Control over velocity, acceleration, and kinetic momentum."},
+    "Reflexes_Utility": {"name": "Stealth", "category": "Utility", "stat_bonus": "reflexes", "stat_penalty": "might", "description": "Moving silently, hiding in shadows, and physical acrobatics."},
+
+    # --- FINESSE ---
+    "Finesse_Offense": {"name": "The Duelist", "category": "Offense", "stat_bonus": "finesse", "stat_penalty": "vitality", "description": "Rapiers/Light Blades. Precision strikes and armor penetration."},
+    "Finesse_Defense": {"name": "The Riposte", "category": "Defense", "stat_bonus": "finesse", "stat_penalty": "fortitude", "description": "Counter-attacking. Punishing enemies who miss their strikes."},
+    "Finesse_Magic": {"name": "School of Flux", "category": "Magic", "stat_bonus": "finesse", "stat_penalty": "endurance", "description": "Phase shifting, liquid manipulation, and matter alteration."},
+    "Finesse_Utility": {"name": "Sleight of Hand", "category": "Utility", "stat_bonus": "finesse", "stat_penalty": "might", "description": "Picking locks, disarming mechanisms, and pickpocketing."},
+
+    # --- ENDURANCE ---
+    "Endurance_Offense": {"name": "The Phalanx", "category": "Offense", "stat_bonus": "endurance", "stat_penalty": "finesse", "description": "Shield-bashing, shoving, and utilizing heavy polearms to control space."},
+    "Endurance_Defense": {"name": "The Ironclad", "category": "Defense", "stat_bonus": "endurance", "stat_penalty": "reflexes", "description": "Medium Armor mastery. Reducing stamina drain from prolonged fights."},
+    "Endurance_Magic": {"name": "School of Ordo", "category": "Magic", "stat_bonus": "endurance", "stat_penalty": "intuition", "description": "Stasis, preservation, and nullification of dynamic forces."},
+    "Endurance_Utility": {"name": "Survival", "category": "Utility", "stat_bonus": "endurance", "stat_penalty": "charm", "description": "Foraging, tracking weather, and enduring extreme environmental hazards."},
+
+    # --- FORTITUDE ---
+    "Fortitude_Offense": {"name": "The Juggernaut", "category": "Offense", "stat_bonus": "fortitude", "stat_penalty": "reflexes", "description": "Unarmed/Slam attacks. Using raw mass to trample and crush enemies."},
+    "Fortitude_Defense": {"name": "The Sentinel", "category": "Defense", "stat_bonus": "fortitude", "stat_penalty": "awareness", "description": "Heavy Armor/Carapace. Passively absorbing massive damage thresholds."},
+    "Fortitude_Magic": {"name": "School of Lex", "category": "Magic", "stat_bonus": "fortitude", "stat_penalty": "intuition", "description": "The imposition of absolute rules and unbreakable physical barriers."},
+    "Fortitude_Utility": {"name": "Labor", "category": "Utility", "stat_bonus": "fortitude", "stat_penalty": "logic", "description": "Carrying massive loads, ignoring exhaustion, and physical resistance to pain."},
+
+    # --- VITALITY ---
+    "Vitality_Offense": {"name": "The Blood-Hunter", "category": "Offense", "stat_bonus": "vitality", "stat_penalty": "knowledge", "description": "Sacrificing one's own HP to inflict massive, savage damage spikes."},
+    "Vitality_Defense": {"name": "The Regenerator", "category": "Defense", "stat_bonus": "vitality", "stat_penalty": "logic", "description": "Rapid biological healing. Clearing trauma tokens quickly during combat."},
+    "Vitality_Magic": {"name": "School of Vita", "category": "Magic", "stat_bonus": "vitality", "stat_penalty": "willpower", "description": "Biomancy, flesh-warping, and the manipulation of life-force."},
+    "Vitality_Utility": {"name": "Husbandry", "category": "Utility", "stat_bonus": "vitality", "stat_penalty": "charm", "description": "Taming, handling, and understanding the mutated beasts of the wastes."},
+
+    # ==========================================
+    # MIND STATS (Mental Manifestation)
+    # ==========================================
+
+    # --- LOGIC ---
+    "Logic_Offense": {"name": "The Tactician", "category": "Offense", "stat_bonus": "logic", "stat_penalty": "intuition", "description": "Traps and Explosives. Setting up calculated kill-zones."},
+    "Logic_Defense": {"name": "The Strategist", "category": "Defense", "stat_bonus": "logic", "stat_penalty": "vitality", "description": "Predictive positioning. Using geometry to force disadvantage on attackers."},
+    "Logic_Magic": {"name": "School of Ratio", "category": "Magic", "stat_bonus": "logic", "stat_penalty": "charm", "description": "Geometric constructs, pure calculation, and spatial distortion."},
+    "Logic_Utility": {"name": "Engineering", "category": "Utility", "stat_bonus": "logic", "stat_penalty": "endurance", "description": "Crafting, repairing machinery, and understanding complex architecture."},
+
+    # --- KNOWLEDGE ---
+    "Knowledge_Offense": {"name": "The Alchemist", "category": "Offense", "stat_bonus": "knowledge", "stat_penalty": "vitality", "description": "Toxic Vials and Acids. Inflicting continuous trauma tokens and debuffs."},
+    "Knowledge_Defense": {"name": "The Artificer", "category": "Defense", "stat_bonus": "knowledge", "stat_penalty": "reflexes", "description": "Deployable cover. Throwing down temporary barricades or smoke screens."},
+    "Knowledge_Magic": {"name": "School of Nexus", "category": "Magic", "stat_bonus": "knowledge", "stat_penalty": "might", "description": "Portals, summoning, and planar gates."},
+    "Knowledge_Utility": {"name": "Medicine", "category": "Utility", "stat_bonus": "knowledge", "stat_penalty": "fortitude", "description": "Anatomy, biological stabilization, and crafting remedies."},
+
+    # --- AWARENESS ---
+    "Awareness_Offense": {"name": "The Overwatch", "category": "Offense", "stat_bonus": "awareness", "stat_penalty": "willpower", "description": "Ambushes. Gaining massive damage bonuses against unalerted targets."},
+    "Awareness_Defense": {"name": "The Precog", "category": "Defense", "stat_bonus": "awareness", "stat_penalty": "endurance", "description": "Unflankable. Cannot be surprised or ambushed by hidden enemies."},
+    "Awareness_Magic": {"name": "School of Aura", "category": "Magic", "stat_bonus": "awareness", "stat_penalty": "logic", "description": "True sight, divination, and energy reading."},
+    "Awareness_Utility": {"name": "Scouting", "category": "Utility", "stat_bonus": "awareness", "stat_penalty": "charm", "description": "Tracking footprints, noticing hidden compartments, and heightened senses."},
+
+    # --- INTUITION ---
+    "Intuition_Offense": {"name": "The Opportunist", "category": "Offense", "stat_bonus": "intuition", "stat_penalty": "logic", "description": "Dirty fighting. Exploiting environmental weaknesses or attacking blinded foes."},
+    "Intuition_Defense": {"name": "The Survivor", "category": "Defense", "stat_bonus": "intuition", "stat_penalty": "knowledge", "description": "Luck-based evasion. Narrowly escaping lethal blows through pure instinct."},
+    "Intuition_Magic": {"name": "School of Omen", "category": "Magic", "stat_bonus": "intuition", "stat_penalty": "fortitude", "description": "Probability manipulation, fate, and luck weaving."},
+    "Intuition_Utility": {"name": "Scavenging", "category": "Utility", "stat_bonus": "intuition", "stat_penalty": "willpower", "description": "Streetwise bartering, finding valuable salvage, and reading people."},
+
+    # --- WILLPOWER ---
+    "Willpower_Offense": {"name": "The Vanguard", "category": "Offense", "stat_bonus": "willpower", "stat_penalty": "awareness", "description": "Fear-inducing strikes. Physically damages while crushing enemy Composure."},
+    "Willpower_Defense": {"name": "The Resolve", "category": "Defense", "stat_bonus": "willpower", "stat_penalty": "finesse", "description": "Ignoring pain. Fighting at full capacity even while critically wounded."},
+    "Willpower_Magic": {"name": "School of Anumis", "category": "Magic", "stat_bonus": "willpower", "stat_penalty": "vitality", "description": "Telepathy, mind domination, and psychic force."},
+    "Willpower_Utility": {"name": "Intimidation", "category": "Utility", "stat_bonus": "willpower", "stat_penalty": "charm", "description": "Interrogation, resisting coercion, and breaking an NPC's resolve."},
+
+    # --- CHARM ---
+    "Charm_Offense": {"name": "The Warlord", "category": "Offense", "stat_bonus": "charm", "stat_penalty": "willpower", "description": "Companion Directives. Commanding pets or mercenaries in coordinated strikes."},
+    "Charm_Defense": {"name": "The Diplomat", "category": "Defense", "stat_bonus": "charm", "stat_penalty": "fortitude", "description": "Misdirection. Forcing an enemy to target a different ally or hesitate."},
+    "Charm_Magic": {"name": "School of Lux", "category": "Magic", "stat_bonus": "charm", "stat_penalty": "logic", "description": "Radiance, illusion, blinding presence, and hard-light constructs."},
+    "Charm_Utility": {"name": "Persuasion", "category": "Utility", "stat_bonus": "charm", "stat_penalty": "endurance", "description": "De-escalation, diplomacy, and gathering information through social grace."}
 }
