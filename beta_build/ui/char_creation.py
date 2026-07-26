@@ -6,7 +6,8 @@ from PyQt6.QtWidgets import (
     QMessageBox, QScrollArea, QGridLayout, QFrame, QTextEdit
 )
 from PyQt6.QtCore import Qt
-from beta_build.core.chassis_data import KINGDOMS, SUB_TYPES, BASE_STATS, ORIGINS, SKILL_TRACKS
+from beta_build.core.chassis_data import KINGDOMS, SUB_TYPES, BASE_STATS, ORIGINS
+from beta_build.core.skills_data import SKILL_TRACKS
 from beta_build.core.models import CharacterSheet
 
 logger = logging.getLogger("CharForge")
@@ -190,44 +191,43 @@ class CharacterCreationScreen(QWidget):
         page = QWidget()
         layout = QVBoxLayout()
         
-        p_label = QLabel("Define Your Paths (Select 4 Tracks):")
+        p_label = QLabel("Define Your Paths (1 Offense, 1 Defense, 2 Utility/Power):")
         p_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #4CAF50;")
         layout.addWidget(p_label)
         
-        # Filter tracks
-        offense_tracks = [k for k, v in SKILL_TRACKS.items() if v["category"] == "Offense"]
-        defense_tracks = [k for k, v in SKILL_TRACKS.items() if v["category"] == "Defense"]
-        utility_magic_tracks = [k for k, v in SKILL_TRACKS.items() if v["category"] in ["Magic", "Utility"]]
-        
         def format_track(k):
             t = SKILL_TRACKS[k]
-            return f"{t['name']} (+1 {t['stat_bonus'].capitalize()}, -1 {t['stat_penalty'].capitalize()})"
+            return f"{t['name']} ({t['category'].capitalize()})"
 
-        self.path_offense = QComboBox()
-        self.path_offense.addItems([format_track(k) for k in offense_tracks])
-        self.path_offense.setProperty("keys", offense_tracks)
+        # Categorize tracks
+        offense_tracks = [k for k, v in SKILL_TRACKS.items() if v["category"].lower() == "offense"]
+        defense_tracks = [k for k, v in SKILL_TRACKS.items() if v["category"].lower() == "defense"]
+        utility_tracks = [k for k, v in SKILL_TRACKS.items() if v["category"].lower() in ["utility", "magic"]]
         
-        self.path_defense = QComboBox()
-        self.path_defense.addItems([format_track(k) for k in defense_tracks])
-        self.path_defense.setProperty("keys", defense_tracks)
+        self.path_1 = QComboBox()
+        self.path_1.addItems([format_track(k) for k in offense_tracks])
+        self.path_1.setProperty("keys", offense_tracks)
         
-        self.path_magic1 = QComboBox()
-        self.path_magic1.addItems([format_track(k) for k in utility_magic_tracks])
-        self.path_magic1.setProperty("keys", utility_magic_tracks)
+        self.path_2 = QComboBox()
+        self.path_2.addItems([format_track(k) for k in defense_tracks])
+        self.path_2.setProperty("keys", defense_tracks)
         
-        self.path_magic2 = QComboBox()
-        self.path_magic2.addItems([format_track(k) for k in utility_magic_tracks])
-        self.path_magic2.setProperty("keys", utility_magic_tracks)
-        # Select a different default for the second slot
-        if self.path_magic2.count() > 1:
-            self.path_magic2.setCurrentIndex(1)
+        self.path_3 = QComboBox()
+        self.path_3.addItems([format_track(k) for k in utility_tracks])
+        self.path_3.setProperty("keys", utility_tracks)
+        if self.path_3.count() > 0: self.path_3.setCurrentIndex(0)
+        
+        self.path_4 = QComboBox()
+        self.path_4.addItems([format_track(k) for k in utility_tracks])
+        self.path_4.setProperty("keys", utility_tracks)
+        if self.path_4.count() > 1: self.path_4.setCurrentIndex(1)
         
         form = QFormLayout()
         for label, widget in [
-            ("Primary Offense:", self.path_offense),
-            ("Primary Defense:", self.path_defense),
-            ("Path A (Magic/Utility):", self.path_magic1),
-            ("Path B (Magic/Utility):", self.path_magic2)
+            ("Primary Offense:", self.path_1),
+            ("Primary Defense:", self.path_2),
+            ("Utility/Power 1:", self.path_3),
+            ("Utility/Power 2:", self.path_4)
         ]:
             widget.setStyleSheet("font-size: 14px; padding: 6px; background-color: #0f1115; border: 1px solid #3a414c;")
             lbl = QLabel(label)
@@ -276,15 +276,16 @@ class CharacterCreationScreen(QWidget):
         shift_target = self.shift_choice.currentText() if size_id != 0 else None
         
         # Fetch chosen paths
-        keys_o = self.path_offense.property("keys")
-        keys_d = self.path_defense.property("keys")
-        keys_m = self.path_magic1.property("keys")
+        keys_1 = self.path_1.property("keys")
+        keys_2 = self.path_2.property("keys")
+        keys_3 = self.path_3.property("keys")
+        keys_4 = self.path_4.property("keys")
         
         self.selected_paths = [
-            keys_o[self.path_offense.currentIndex()],
-            keys_d[self.path_defense.currentIndex()],
-            keys_m[self.path_magic1.currentIndex()],
-            keys_m[self.path_magic2.currentIndex()]
+            keys_1[self.path_1.currentIndex()],
+            keys_2[self.path_2.currentIndex()],
+            keys_3[self.path_3.currentIndex()],
+            keys_4[self.path_4.currentIndex()]
         ]
         
         # Load Base Stats
@@ -308,13 +309,7 @@ class CharacterCreationScreen(QWidget):
         if size_id != 0 and shift_target:
             self.final_stats[shift_target] += 1
             
-        # Apply Path +/- Modifiers
-        for path_key in self.selected_paths:
-            track = SKILL_TRACKS[path_key]
-            bonus = track["stat_bonus"]
-            penalty = track["stat_penalty"]
-            self.final_stats[bonus] = min(10, self.final_stats.get(bonus, 5) + 1)
-            self.final_stats[penalty] = max(1, self.final_stats.get(penalty, 5) - 1)
+        # (Stat path modifiers removed as per skills_data.py structure)
             
         manifest = f"SUBJECT: {self.char_name}\n"
         manifest += f"KINGDOM: {self.selected_kingdom}\n"
