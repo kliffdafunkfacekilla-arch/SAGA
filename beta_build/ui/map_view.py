@@ -3,7 +3,7 @@ Provides the MapCanvas and BattleMapCanvas components for the left-hand panel of
 """
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QTextEdit, QLineEdit, QGraphicsView, 
-                             QGraphicsScene, QMenu, QGraphicsEllipseItem, QGraphicsItem, QGraphicsTextItem, QGraphicsRectItem)
+                             QGraphicsScene, QMenu, QGraphicsEllipseItem, QGraphicsItem, QGraphicsTextItem, QGraphicsRectItem, QGraphicsPixmapItem)
 from PyQt6.QtCore import Qt, pyqtSlot, QRectF, QTimer
 from PyQt6.QtGui import QBrush, QColor, QPen, QPainter
 
@@ -26,25 +26,23 @@ class LootItem(QGraphicsEllipseItem):
         self.label.setPos(-10, -15)
         self.setZValue(1) # Under players, above dead bodies
 
-class TokenItem(QGraphicsEllipseItem):
+class TokenItem(QGraphicsPixmapItem):
     """Dynamic map token representing an entity (player, monster, etc)."""
-    def __init__(self, x, y, size, color, name, uuid, tags=None, parent=None):
-        super().__init__(0, 0, size, size, parent)
+    def __init__(self, x, y, size, pixmap, name, uuid, tags=None, parent=None):
+        super().__init__(pixmap, parent)
         self.setPos(x * size, y * size)
         self.uuid = uuid
         self.name = name
         self.tags = tags or []
         
-        self.setBrush(QBrush(QColor(color)))
-        self.setPen(QPen(QColor("white"), 2))
-        
         # Add label for name
         self.label = QGraphicsTextItem(name, self)
         self.label.setDefaultTextColor(QColor("white"))
+        # Give label a dark background so it's readable over textures
         self.label.setPos(0, -15)
         
-        self.original_color = QColor(color)
         self.is_dead = False
+        self.setZValue(1)
 
     def move_to_grid(self, x, y, size):
         if not self.is_dead:
@@ -52,14 +50,13 @@ class TokenItem(QGraphicsEllipseItem):
             
     def flash_damage(self):
         if self.is_dead: return
-        self.setBrush(QBrush(QColor("white")))
-        # Revert color after 150ms
-        QTimer.singleShot(150, lambda: self.setBrush(QBrush(self.original_color)) if not self.is_dead else None)
+        # A simple opacity flash for pixmaps
+        self.setOpacity(0.5)
+        QTimer.singleShot(150, lambda: self.setOpacity(1.0) if not self.is_dead else None)
         
     def set_dead(self):
         self.is_dead = True
-        self.setBrush(QBrush(QColor("#333333")))
-        self.setPen(QPen(QColor("#555555"), 1))
+        self.setOpacity(0.3)
         self.label.setDefaultTextColor(QColor("#555555"))
         # Move to background so living tokens walk over it
         self.setZValue(-1)
@@ -69,9 +66,10 @@ class BattleMapCanvas(QGraphicsView):
     Renders the local battle map dynamically.
     Optimized 2D Engine using QGraphicsScene.
     """
-    def __init__(self, bus):
+    def __init__(self, bus, sprite_manager):
         super().__init__()
         self.bus = bus
+        self.sprite_manager = sprite_manager
         self.scene = QGraphicsScene()
         self.setScene(self.scene)
         self.setMinimumHeight(350)
@@ -125,7 +123,18 @@ class BattleMapCanvas(QGraphicsView):
             self.move_entity(uuid, x, y)
             return
             
-        token = TokenItem(x, y, self.tile_size, color, name, uuid, tags)
+        if uuid == "player_1":
+            pixmap = self.sprite_manager.get_sprite("human_m")
+        else:
+            # Simple heuristic mapping for enemies for now
+            if "goblin" in name.lower() or "orc" in name.lower():
+                pixmap = self.sprite_manager.get_sprite("orc")
+            elif "wolf" in name.lower():
+                pixmap = self.sprite_manager.get_sprite("wolf")
+            else:
+                pixmap = self.sprite_manager.get_sprite("entity_red")
+                
+        token = TokenItem(x, y, self.tile_size, pixmap, name, uuid, tags)
         
         # Initially hide if not player and not in visible
         if uuid != "player_1":
@@ -223,18 +232,27 @@ class BattleMapCanvas(QGraphicsView):
         for y, row in enumerate(grid):
             for x, node in enumerate(row):
                 # node is a TerrainTile dict
-                node_type = node.get("tile_type", "floor")
-                rect = QGraphicsRectItem(x * self.tile_size, y * self.tile_size, self.tile_size, self.tile_size)
-                
-                if node_type in ("wall", "obstacle"):
-                    rect.setBrush(QBrush(QColor("#444444")))
+                # Get appropriate sprite
+                if node_type == "wall":
+                    pixmap = self.sprite_manager.get_sprite("stone_dark_0")
+                elif node_type == "obstacle":
+                    pixmap = self.sprite_manager.get_sprite("tree")
                 elif node_type == "water":
-                    rect.setBrush(QBrush(QColor("#113355")))
+                    pixmap = self.sprite_manager.get_sprite("water")
+                elif node_type == "door":
+                    pixmap = self.sprite_manager.get_sprite("closed_door")
                 else:
-                    rect.setBrush(QBrush(QColor("#1a1a1a"))) # Floor
-                    
-                rect.setPen(QPen(Qt.PenStyle.NoPen))
+                    pixmap = self.sprite_manager.get_sprite("grey_dirt_0")
+                
+                rect = QGraphicsPixmapItem(pixmap)
+                rect.setPos(x * self.tile_size, y * self.tile_size)
                 rect.setOpacity(0.0) # Start fully unexplored
+                # Walls are slightly higher z-index to overlay floors correctly if needed
+                if node_type in ("wall", "obstacle"):
+                    rect.setZValue(0.5)
+                else:
+                    rect.setZValue(0)
+                    
                 self.scene.addItem(rect)
                 self.tile_items[(x, y)] = rect
                     
@@ -303,7 +321,8 @@ class MapCanvas(QWidget):
         self.title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.title.setStyleSheet("font-size: 20px; font-weight: bold; color: #44FF44; margin-bottom: 5px;")
         
-        self.battle_map = BattleMapCanvas(self.bus)
+        self.sprite_manager = SpriteManager(tile_size=32)
+        self.battle_map = BattleMapCanvas(self.bus, self.sprite_manager)
         
         self.log_view = QTextEdit()
         self.log_view.setReadOnly(True)
