@@ -325,7 +325,7 @@ class SagaDesktopApp(QMainWindow):
             self.map_canvas.log_view.append(f"<b>You:</b> {intent}")
             
         # Route through strict CommandParser
-        action_result = self.command_parser.parse_intent(intent)
+        action_result = self.command_parser.parse_intent(intent, player_character=self.player_character)
         
         if action_result.get("type") == "movement_success":
             # Deduct stamina (example basic math hook)
@@ -351,71 +351,9 @@ class SagaDesktopApp(QMainWindow):
             self.map_canvas.log_view.append(f"<font color='red'>{action_result['system_prompt']}</font>")
             return
             
-        # If generic, fallback to older basic routing
-        import re
-        
-        match_travel = re.search(r"(?:travel to|head to|go to)\s+([a-zA-Z\s]+)", intent, re.IGNORECASE)
-        if match_travel:
-            location = match_travel.group(1).strip()
-            self.map_canvas.log_view.append(f"\n<i>Traveling to {location}...</i>\n")
-            self.bus.publish("TRAVEL_REQUESTED", {"location": location, "stats": self.player_character.stats})
+        elif action_result.get("type") == "handled_by_resolver":
             return
             
-        match_combat = re.search(r"(?:attack|strike|hit|intimidate|fear)\s+([a-zA-Z\s]+)", intent, re.IGNORECASE)
-        if match_combat and not intent.startswith("COMBAT RESOLUTION:"):
-            target = match_combat.group(1).strip()
-            
-            # Very basic parsing for demo: check if it's a mental attack
-            is_mental = "intimidate" in intent.lower() or "fear" in intent.lower()
-            
-            weapon_mod = 0
-            if self.player_character.inventory.slots.get("weapon"):
-                weapon_mod += self.player_character.inventory.slots["weapon"].modifier
-                
-            armor_mod = 0
-            if is_mental:
-                for slot in self.player_character.inventory.mental_slots:
-                    item = self.player_character.inventory.slots.get(slot)
-                    if item: armor_mod += item.armor_mod
-            else:
-                for slot in self.player_character.inventory.physical_slots:
-                    item = self.player_character.inventory.slots.get(slot)
-                    if item: armor_mod += item.armor_mod
-            
-            # Extract defender's terrain tags and cover from Map Canvas
-            defender_tags = []
-            defender_cover = 0
-            for uid, ent in self.map_canvas.battle_map.entities.items():
-                if target.lower() in ent.name.lower():
-                    tx = int(ent.pos().x() // self.map_canvas.battle_map.tile_size)
-                    ty = int(ent.pos().y() // self.map_canvas.battle_map.tile_size)
-                    try:
-                        node = self.map_canvas.battle_map.grid_data[ty][tx]
-                        if isinstance(node, dict):
-                            defender_tags.extend(node.get("tags", []))
-                            defender_cover = node.get("cover_bonus", 0)
-                        
-                        # Add entity's own tags too
-                        if hasattr(ent, 'tags'):
-                            defender_tags.extend(ent.tags)
-                    except (IndexError, AttributeError):
-                        pass
-                    break
-                    
-            combat_payload = {
-                "attacker": self.player_character.name,
-                "attacker_tags": self.player_character.tags,
-                "defender": target,
-                "defender_tags": defender_tags,
-                "offense_stat": self.player_character.stats.get("might", 5) if not is_mental else self.player_character.stats.get("willpower", 5),
-                "weapon_mod": weapon_mod,
-                "defense_stat": 4, # Example enemy stat
-                "armor_mod": 1, # Example enemy armor
-                "cover_bonus": defender_cover,
-                "is_physical": not is_mental
-            }
-            self.bus.publish("COMBAT_ACTION_DECLARED", combat_payload)
-            return
             
         self.map_canvas.log_view.append("\n<i>Narrator is thinking...</i>\n")
         self.map_canvas.log_view.append("<font color='#a0a0ff'>[NARRATOR]:</font> ")

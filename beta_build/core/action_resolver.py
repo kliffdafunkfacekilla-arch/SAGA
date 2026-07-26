@@ -14,6 +14,30 @@ class ActionResolver:
     def __init__(self, bus):
         self.bus = bus
         self.bus.subscribe("COMBAT_ACTION_DECLARED", self._on_combat_action)
+        self.bus.subscribe("INTERACTION_DECLARED", self._on_interaction)
+        
+    def _on_interaction(self, payload: Dict[str, Any]):
+        found_node = payload.get("found_node", {})
+        tags = found_node.get("tags", [])
+        
+        if found_node.get("tile_type") == "chest":
+            if "closed" in tags:
+                tags.remove("closed")
+                tags.append("open")
+                
+                # We could spawn a loot item here via the EventBus
+                import random
+                from beta_build.core.loot_data import LOOT_TABLES
+                
+                item_data = {"name": "Health Potion", "type": "consumable"} # default
+                if "default" in LOOT_TABLES:
+                    item_data = random.choice(LOOT_TABLES["default"])
+                    
+                self.bus.publish("SPAWN_LOOT", {
+                    "x": payload.get("found_x"),
+                    "y": payload.get("found_y"),
+                    "item_data": item_data
+                })
         
     def _on_combat_action(self, payload: Dict[str, Any]):
         attacker = payload.get("attacker", "Attacker")
@@ -40,12 +64,11 @@ class ActionResolver:
         if "cover" in defender_tags and is_physical:
             armor_mod += cover_bonus
             
-        # Roll the dice (1d12 system)
-        att_roll = random.randint(1, 12)
-        def_roll = random.randint(1, 12)
+        # Roll the dice (1d20 system)
+        att_roll = random.randint(1, 20)
         
         att_total = att_roll + offense_stat + weapon_mod
-        def_total = def_roll + defense_stat + armor_mod
+        def_total = 10 + defense_stat + armor_mod
         
         margin = att_total - def_total
         
@@ -53,11 +76,11 @@ class ActionResolver:
         damage_type = "Physical" if is_physical else "Mental"
         
         log_string = f"{attacker} used {technique} (Effort: {effort} {effort_pool}).\n"
-        log_string += f"{attacker} rolled {att_total} (d12:{att_roll} + Stat:{offense_stat} + Mod:{weapon_mod}). "
+        log_string += f"{attacker} rolled {att_total} (d20:{att_roll} + Stat:{offense_stat} + Mod:{weapon_mod}). "
         if "cover" in defender_tags and is_physical:
-            log_string += f"{defender} rolled {def_total} (d12:{def_roll} + Stat:{defense_stat} + Mod:{armor_mod} [includes +{cover_bonus} Cover]). "
+            log_string += f"{defender} defense is {def_total} (Base:10 + Stat:{defense_stat} + Armor:{armor_mod} [includes +{cover_bonus} Cover]). "
         else:
-            log_string += f"{defender} rolled {def_total} (d12:{def_roll} + Stat:{defense_stat} + Mod:{armor_mod}). "
+            log_string += f"{defender} defense is {def_total} (Base:10 + Stat:{defense_stat} + Armor:{armor_mod}). "
         
         flavor_text = get_skill_flavor(technique)
         if flavor_text:
@@ -72,8 +95,8 @@ class ActionResolver:
             att_tactic = random.choice(tactics)
             def_tactic = random.choice(tactics)
             
-            clash_att = random.randint(1, 12) + offense_stat + weapon_mod
-            clash_def = random.randint(1, 12) + defense_stat + weapon_mod # Assuming defender weapon mod
+            clash_att = random.randint(1, 20) + offense_stat + weapon_mod
+            clash_def = random.randint(1, 20) + defense_stat + weapon_mod # Assuming defender weapon mod
             
             clash_winner = attacker if clash_att >= clash_def else defender
             clash_loser = defender if clash_att >= clash_def else attacker

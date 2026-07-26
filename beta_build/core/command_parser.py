@@ -52,7 +52,7 @@ class CommandParser:
         self.save_pattern = re.compile(r"^/save$", re.IGNORECASE)
         self.load_pattern = re.compile(r"^/load$", re.IGNORECASE)
 
-    def parse_intent(self, intent: str, player_uuid: str = "player_1") -> Dict[str, Any]:
+    def parse_intent(self, intent: str, player_uuid: str = "player_1", player_character=None) -> Dict[str, Any]:
         """
         Interprets the player intent string.
         Returns a dictionary detailing the action to take.
@@ -115,7 +115,7 @@ class CommandParser:
             if curr_x == -1:
                 return {"type": "error", "system_prompt": "System Error: Player token not found on the physical board."}
                 
-            return self._resolve_combat(target_str, curr_x, curr_y, player_uuid, is_mental=False)
+            return self._resolve_combat(target_str, curr_x, curr_y, player_uuid, is_mental=False, player_character=player_character)
             
         # 3. Check for Mental Combat
         mental_match = self.mental_attack_pattern.search(intent_lower)
@@ -126,7 +126,7 @@ class CommandParser:
             if curr_x == -1:
                 return {"type": "error", "system_prompt": "System Error: Player token not found on the physical board."}
                 
-            return self._resolve_combat(target_str, curr_x, curr_y, player_uuid, is_mental=True)
+            return self._resolve_combat(target_str, curr_x, curr_y, player_uuid, is_mental=True, player_character=player_character)
             
         # 4. Check for Interaction
         interact_match = self.interact_pattern.search(intent_lower)
@@ -143,7 +143,7 @@ class CommandParser:
             if curr_x == -1:
                 return {"type": "error", "system_prompt": "System Error: Player token not found on the physical board."}
                 
-            return self._resolve_interaction(target_str, curr_x, curr_y, player_uuid)
+            return self._resolve_interaction(target_str, curr_x, curr_y, player_uuid, player_character=player_character)
             
         # Fallback to generic unhandled (let AI handle it)
         return {
@@ -196,7 +196,7 @@ class CommandParser:
             "dx": new_x, "dy": new_y
         }
         
-    def _resolve_combat(self, target_str: str, curr_x: int, curr_y: int, player_uuid: str, is_mental: bool = False) -> Dict[str, Any]:
+    def _resolve_combat(self, target_str: str, curr_x: int, curr_y: int, player_uuid: str, is_mental: bool = False, player_character=None) -> Dict[str, Any]:
         beat_to_consume = "focus" if is_mental else "stamina"
         action_name = "mental attack" if is_mental else "attack"
         
@@ -240,14 +240,42 @@ class CommandParser:
         target_name = self.zone_manager.entities[target_uuid].get("name", target_str)
         target_tags = self.zone_manager.entities[target_uuid].get("tags", [])
         
-        # In a full system, we'd pull the attacker's true stats
+        # Dynamic Stats Extraction
+        attacker_name = "player_1"
+        attacker_tags = []
+        offense_stat = 5
+        weapon_mod = 0
+        
+        if player_character:
+            attacker_name = player_character.name
+            attacker_tags = player_character.tags
+            if is_mental:
+                offense_stat = player_character.stats.get("willpower", 5)
+            else:
+                offense_stat = player_character.stats.get("might", 5)
+                if player_character.inventory.slots.get("weapon"):
+                    weapon_mod += player_character.inventory.slots["weapon"].modifier
+                    
+        # Defender stats extracted dynamically if it's an entity
+        defense_stat = 5
+        armor_mod = 0
+        enemy_data = self.zone_manager.entities.get(target_uuid, {})
+        if "stats" in enemy_data:
+            if is_mental:
+                defense_stat = enemy_data["stats"].get("logic", 5)
+            else:
+                defense_stat = enemy_data["stats"].get("reflexes", 5)
+                # enemy armor logic here if applicable
+        
         payload = {
-            "attacker": "player_1", # Stub
+            "attacker": attacker_name, 
             "defender": target_uuid,
-            "offense_stat": 7, 
-            "defense_stat": 5,
+            "offense_stat": offense_stat, 
+            "defense_stat": defense_stat,
+            "weapon_mod": weapon_mod,
+            "armor_mod": armor_mod,
             "is_physical": not is_mental,
-            "attacker_tags": [],
+            "attacker_tags": attacker_tags,
             "defender_tags": target_tags,
             "technique": action_name.capitalize(),
             "effort": 1
@@ -260,7 +288,7 @@ class CommandParser:
             "type": "handled_by_resolver"
         }
         
-    def _resolve_interaction(self, target_str: str, curr_x: int, curr_y: int, player_uuid: str) -> Dict[str, Any]:
+    def _resolve_interaction(self, target_str: str, curr_x: int, curr_y: int, player_uuid: str, player_character=None) -> Dict[str, Any]:
         """Validates interaction with grid nodes (chests, doors)."""
         target_lower = target_str.lower()
         
@@ -298,31 +326,15 @@ class CommandParser:
                 "system_prompt": f"System: Player attempted to interact with '{target_str}', but it is not interactable. Narrate."
             }
             
-        # Handle specific object types
-        if found_node.get("tile_type") == "chest":
-            if "closed" in tags:
-                # Open the chest
-                tags.remove("closed")
-                tags.append("open")
-                
-                # We could spawn a loot item here via the EventBus
-                self.bus.publish("SPAWN_LOOT", {
-                    "x": found_x,
-                    "y": found_y,
-                    "item_data": {"name": "Health Potion", "type": "consumable"}
-                })
-                
-                self.turn_manager.consume_beat(player_uuid, "focus")
-                
-                return {
-                    "type": "interaction_success",
-                    "system_prompt": f"System: Player opened the chest. Inside, they found a Health Potion. Narrate the discovery."
-                }
-            else:
-                return {
-                    "type": "interaction_failed",
-                    "system_prompt": f"System: Player attempted to open the chest, but it is already open and empty. Narrate."
-                }
+        # Dispatch Interaction
+        self.bus.publish("INTERACTION_DECLARED", {
+            "player_uuid": player_uuid,
+            "player_character": player_character.model_dump() if player_character else None,
+            "target_str": target_str,
+            "found_node": found_node,
+            "found_x": found_x,
+            "found_y": found_y
+        })
                 
         self.turn_manager.consume_beat(player_uuid, "focus")
         return {

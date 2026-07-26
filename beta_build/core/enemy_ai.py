@@ -71,7 +71,8 @@ class EnemyAIEngine:
                         self.turn_manager.consume_beat(active_uuid, "move")
                         self.bus.publish("MOVE_ENTITY", {
                             "uuid": active_uuid,
-                            "dx": dx, "dy": dy
+                            "dx": dx, "dy": dy,
+                            "is_ai_turn": True
                         })
                         ex, ey = new_x, new_y
                         dist = math.hypot(px - ex, py - ey)
@@ -82,16 +83,23 @@ class EnemyAIEngine:
             self.turn_manager.consume_beat(active_uuid, "stamina")
             actions_taken.append(f"{name} attacked the Player!")
             
+            offense_stat = 6
+            defense_stat = 5
+            stats = entity_data.get("stats", {})
+            if stats:
+                offense_stat = stats.get("might", 6)
+                
             payload = {
                 "attacker": active_uuid,
                 "defender": "player_1",
-                "offense_stat": 6, 
-                "defense_stat": 5,
+                "offense_stat": offense_stat, 
+                "defense_stat": defense_stat, # We don't have player stats here, ActionResolver handles defender now or we pass what we have
                 "is_physical": True,
                 "attacker_tags": entity_data.get("tags", []),
                 "defender_tags": [],
                 "technique": "Savage Strike",
-                "effort": 1
+                "effort": 1,
+                "is_ai_turn": True
             }
             
             self.bus.publish("COMBAT_ACTION_DECLARED", payload)
