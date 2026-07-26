@@ -9,14 +9,15 @@ from beta_build.ui.event_bus import EventBus
 from beta_build.ai_services.llm_worker import LLMWorker
 from beta_build.audio.audio_manager import TTSWorker, STTWorker
 from beta_build.core.models import CharacterSheet
-from beta_build.ai_services.director import AIDirector
+from beta_build.core.campaign_manager import CampaignManager
+from beta_build.core.save_manager import SaveManager
+from beta_build.core.macro_simulator import MacroSimulator
 from beta_build.data.memory_store import MemoryStore
 from beta_build.core.world_gen_worker import WorldGenWorker
 from beta_build.core.journey_manager import JourneyManager
 from beta_build.core.action_resolver import ActionResolver
 from beta_build.core.anomaly_resolver import AnomalyResolver
 from beta_build.core.combat_manager import CombatManager
-from beta_build.core.campaign_manager import CampaignManager
 
 # --- Frontend Components ---
 from beta_build.ui.char_creation import CharacterCreationScreen
@@ -91,7 +92,8 @@ class SagaDesktopApp(QMainWindow):
         
         # Navigation Subs
         self.bus.subscribe("UI_START_NEW_GAME", lambda p: self.stack.setCurrentIndex(1))
-        self.bus.subscribe("UI_LOAD_GAME", self._show_game)
+        self.bus.subscribe("UI_LOAD_GAME", self._on_load_game)
+        self.bus.subscribe("UI_SAVE_GAME", self._on_save_game)
         self.bus.subscribe("UI_FINALIZE_PARTY", self._show_game)
         self.bus.subscribe("PLAYER_CREATED", self._on_player_created)
         
@@ -117,6 +119,9 @@ class SagaDesktopApp(QMainWindow):
         self.bus.subscribe("MECHANICS_TRIGGERED", self._handle_mechanics_triggered)
         self.bus.subscribe("LOOT_ACQUIRED", self._on_loot_acquired)
         self.bus.subscribe("SYSTEM_LOG", self._on_system_log)
+        
+        self.bus.subscribe("GENERATE_NEXT_NODE", self._handle_generate_next_node)
+        self.bus.subscribe("EVALUATE_WORLD_MUTATION", self._handle_world_mutation)
 
         # Background Workers Initialization
         self.init_workers()
@@ -134,9 +139,13 @@ class SagaDesktopApp(QMainWindow):
         self.memory = MemoryStore()
         self.journey_manager = JourneyManager(self.bus)
         self.action_resolver = ActionResolver(self.bus)
+        self.save_manager = SaveManager()
         self.anomaly_resolver = AnomalyResolver(self.bus)
         self.combat_manager = CombatManager(self.bus)
-        self.campaign_manager = CampaignManager(self.bus)
+        self.macro_simulator = MacroSimulator()
+        self.campaign_manager = CampaignManager(self.bus, self.macro_simulator)
+        
+        self.bus.subscribe("WORLD_TICK", lambda p: self.macro_simulator.simulate_tick())
 
     def init_workers(self):
         """Initializes and connects QThreads for background AI and audio tasks."""
@@ -169,15 +178,73 @@ class SagaDesktopApp(QMainWindow):
         
     def _show_game(self, payload=None):
         self.stack.setCurrentIndex(2)
+        
+        if not self.player_character:
+            self.map_canvas.log_view.append("<font color='red'>[ERROR] No player character loaded.</font>")
+            return
+            
         # Hook up the Pydantic character state to the UI HUD
         self.bus.publish("HUD_UPDATE", {"character": self.player_character.model_dump()})
         
+        # If payload contains map_data, we loaded from a save.
+        if payload and payload.get("map_data"):
+            self.map_canvas.log_view.append("<i><font color='#a0a0a0'>Engine resuming saved state...</font></i>\n")
+            self.bus.publish("MAP_PAYLOAD_READY", payload.get("map_data"))
+            return
+            
         self.map_canvas.log_view.append("<i><font color='#a0a0a0'>Engine booting. The AI Game Master is designing the world...</font></i>\n")
         
         # 1. Generate the base map IMMEDIATELY so the user isn't staring at a blank screen
         location = "Aloa"
         self._pending_boot_location = location
         self.bus.publish("GENERATE_SAFE_MAP", {"location": location})
+
+    def _on_save_game(self, payload):
+        if not self.player_character: return
+        
+        # Enforce "Camp Save" only: Cannot save if hostile entities exist
+        hostiles = [ent for ent in self.map_canvas.battle_map.entities.values() if "hostile" in ent.get("tags", [])]
+        if hostiles:
+            self.map_canvas.log_view.append("<font color='red'>[SYSTEM] You cannot save while hostiles are nearby! Clear the area or find a camp first.</font>")
+            return
+            
+        map_data = {
+            "name": self.map_canvas.battle_map.map_name,
+            "width": self.map_canvas.battle_map.grid_width,
+            "height": self.map_canvas.battle_map.grid_height,
+            "grid": [[t.model_dump() for t in row] for row in self.map_canvas.battle_map.grid],
+            "entities": self.map_canvas.battle_map.entities
+        }
+        
+        data = {
+            "character": self.player_character.model_dump(),
+            "campaign": {
+                "current_node_id": self.campaign_manager.current_node_id,
+                "remaining_dynamic_slots": self.campaign_manager.remaining_dynamic_slots,
+                "nodes": self.campaign_manager.nodes
+            },
+            "map_data": map_data
+        }
+        
+        if self.save_manager.save_game(1, data):
+            self.bus.publish("SYSTEM_LOG", {"message": "<font color='#00FF00'>[SYSTEM] Game state saved successfully.</font>"})
+
+    def _on_load_game(self, payload):
+        data = self.save_manager.load_game(1)
+        if not data:
+            self.start_menu.append_log("<font color='red'>Failed to load game. No save file found.</font>")
+            return
+            
+        from beta_build.core.models import CharacterSheet
+        self.player_character = CharacterSheet(**data.get("character", {}))
+        
+        camp_data = data.get("campaign", {})
+        self.campaign_manager.current_node_id = camp_data.get("current_node_id")
+        self.campaign_manager.remaining_dynamic_slots = camp_data.get("remaining_dynamic_slots", 0)
+        self.campaign_manager.nodes = camp_data.get("nodes", {})
+        
+        # Switch to game view and pass the map data
+        self._show_game({"map_data": data.get("map_data")})
 
     def _on_map_payload_ready(self, payload):
         """Called when WorldGen finishes. If entities are present, it's combat."""
@@ -435,10 +502,87 @@ class SagaDesktopApp(QMainWindow):
         if msg:
             self.map_canvas.log_view.append(msg)
 
+    def _handle_generate_next_node(self, payload):
+        current_node = payload.get("current_node", {})
+        
+        past_memories = self.memory.recall_context("Summarize the player's recent actions and their consequences.")
+        
+        prompt = (
+            f"The player has just completed the campaign phase: '{current_node.get('title')}'. "
+            f"Here is what happened recently:\n{past_memories}\n\n"
+            f"Based on their actions, generate the NEXT major plot node for the campaign. "
+            f"You MUST return a raw JSON object with this exact structure:\n"
+            "{\n"
+            '  "node_id": "unique_id_here",\n'
+            '  "title": "Title of the next phase",\n'
+            '  "description": "Brief description of the new situation and goal",\n'
+            '  "is_major_plot_point": true,\n'
+            '  "dynamic_slots": 2\n'
+            "}"
+        )
+        self.bus.publish("EXECUTE_AI_INTENT", {"intent": prompt, "system_prompt": True, "tag": "generate_next_node"})
+        
+    def _handle_world_mutation(self, payload):
+        resolution = payload.get("resolution", "")
+        
+        prompt = (
+            f"The player just resolved an event with this outcome: '{resolution}'. "
+            f"Based on this, what immediate physical change happens in the world? "
+            f"You MUST return a raw JSON object with this structure:\n"
+            "{\n"
+            '  "narrative": "A scout spots you and calls for backup!",\n'
+            '  "world_updates": {\n'
+            '    "spawn_entities": [\n'
+            '      {"name": "Bandit Reinforcement", "sprite": "hostile", "tags": ["humanoid", "hostile"], "x": 10, "y": 10}\n'
+            '    ]\n'
+            '  }\n'
+            "}"
+        )
+        self.bus.publish("EXECUTE_AI_INTENT", {"intent": prompt, "system_prompt": True, "tag": "world_mutation"})
+
     @pyqtSlot(str, str)
     def _on_llm_complete(self, tag: str, full_text: str):
+        import json
+        
+        if tag == "generate_next_node":
+            try:
+                # Find the JSON block
+                start = full_text.find("{")
+                end = full_text.rfind("}") + 1
+                if start != -1 and end != 0:
+                    data = json.loads(full_text[start:end])
+                    self.campaign_manager.append_and_transition(data)
+                return
+            except Exception as e:
+                self.map_canvas.log_view.append(f"<font color='red'>[ERROR] Failed to parse generated node: {e}</font>")
+                return
+                
+        if tag == "world_mutation":
+            try:
+                start = full_text.find("{")
+                end = full_text.rfind("}") + 1
+                if start != -1 and end != 0:
+                    data = json.loads(full_text[start:end])
+                    narrative = data.get("narrative", "")
+                    if narrative:
+                        self.map_canvas.log_view.append(f"\n<font color='#FFAA00'>[WORLD UPDATE]: {narrative}</font>\n")
+                        
+                    updates = data.get("world_updates", {})
+                    for ent in updates.get("spawn_entities", []):
+                        self.bus.publish("SPAWN_ENTITY", {
+                            "uuid": f"mutated_{hash(ent.get('name', 'ent'))}",
+                            "x": ent.get("x", 20),
+                            "y": ent.get("y", 20),
+                            "color": "red" if "hostile" in ent.get("tags", []) else "blue",
+                            "name": ent.get("name", "Unknown"),
+                            "tags": ent.get("tags", [])
+                        })
+                return
+            except Exception as e:
+                self.map_canvas.log_view.append(f"<font color='red'>[ERROR] Failed to parse world mutation: {e}</font>")
+                return
+                
         if tag == "boot_sequence":
-            import json
             try:
                 data = json.loads(full_text)
                 world_updates = data.get("world_updates", {})

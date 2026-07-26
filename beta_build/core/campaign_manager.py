@@ -10,8 +10,9 @@ from typing import Dict, Any
 logger = logging.getLogger("CampaignManager")
 
 class CampaignManager:
-    def __init__(self, bus):
+    def __init__(self, bus, macro_simulator=None):
         self.bus = bus
+        self.macro_simulator = macro_simulator
         self.campaign_data = {}
         self.nodes = {}
         
@@ -101,6 +102,16 @@ class CampaignManager:
             }
         })
         
+        # Autosave Game when reaching a new major node
+        self.bus.publish("UI_SAVE_GAME", {})
+        
+    def append_and_transition(self, new_node: Dict[str, Any]):
+        """Dynamically append a generated node to the DAG and transition to it."""
+        node_id = new_node.get("node_id")
+        if node_id:
+            self.nodes[node_id] = new_node
+            self._transition_to_node(node_id)
+        
     def _on_resolve_dynamic_slot(self, payload: Dict[str, Any]):
         # Called when a player resolves a procedural local event
         if self.remaining_dynamic_slots > 0:
@@ -112,6 +123,7 @@ class CampaignManager:
             resolution = payload.get("resolution", "")
             if resolution:
                 self.bus.publish("STORE_MEMORY", {"text": resolution, "type": "plot_resolution"})
+                self.bus.publish("EVALUATE_WORLD_MUTATION", {"resolution": resolution})
                 
             if self.remaining_dynamic_slots <= 0:
                 self._advance_campaign()
@@ -122,22 +134,25 @@ class CampaignManager:
         current = self.nodes.get(self.current_node_id)
         if not current: return
         
-        next_nodes = current.get("next_nodes", [])
-        if next_nodes:
-            # For a true DAG with branches, we might ask the player or check state. 
-            # For linear, just take the first.
-            self._transition_to_node(next_nodes[0])
-        else:
-            self.bus.publish("SYSTEM_LOG", {"message": "<br><font color='#FFD700'><b>CAMPAIGN COMPLETE.</b></font>"})
+        self.bus.publish("SYSTEM_LOG", {"message": "<br><font color='#FF5555'><b>[SYSTEM] Analyzing past events to generate next plot phase...</b></font>"})
+        self.bus.publish("GENERATE_NEXT_NODE", {"current_node": current})
             
     def _on_request_seeds(self, payload: Dict[str, Any]):
         if self.remaining_dynamic_slots > 0:
             env = payload.get("environment", "Unknown location")
             tags = payload.get("tags", [])
+            
+            macro_context = ""
+            if self.macro_simulator:
+                # Assuming location name is roughly the Burg name
+                burg_name = payload.get("location", env)
+                macro_context = self.macro_simulator.get_burg_context(burg_name)
+                
             prompt = (
                 f"The players are in {env}. Tags: {tags}. "
+                f"Macro World Context: {macro_context}\n"
                 f"They need {self.remaining_dynamic_slots} more resolved event(s) to advance the plot. "
-                f"Generate 3 minor narrative hooks (Seeds) that fit this environment and the players' current stats. "
+                f"Generate 3 minor narrative hooks (Seeds) that fit this environment and the Macro World Context (e.g. Unrest, Wealth). "
                 f"Return strictly as a JSON array of strings."
             )
             # Ask the AI director for hooks

@@ -48,6 +48,9 @@ class CommandParser:
             r"\b(?:end turn|pass|done)\b",
             re.IGNORECASE
         )
+        
+        self.save_pattern = re.compile(r"^/save$", re.IGNORECASE)
+        self.load_pattern = re.compile(r"^/load$", re.IGNORECASE)
 
     def parse_intent(self, intent: str, player_uuid: str = "player_1") -> Dict[str, Any]:
         """
@@ -55,6 +58,15 @@ class CommandParser:
         Returns a dictionary detailing the action to take.
         """
         intent_lower = intent.lower()
+        
+        # Check for Save/Load commands
+        if self.save_pattern.search(intent_lower):
+            self.bus.publish("UI_SAVE_GAME", {})
+            return {"type": "system", "system_prompt": "System: Game state saved."}
+            
+        if self.load_pattern.search(intent_lower):
+            self.bus.publish("UI_LOAD_GAME", {})
+            return {"type": "system", "system_prompt": "System: Game state loaded."}
         
         # 0. Check for End Turn
         if self.end_turn_pattern.search(intent_lower):
