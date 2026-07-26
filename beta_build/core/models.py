@@ -6,6 +6,16 @@ Using Pydantic ensures data integrity before passing state to the LLM or saving 
 from pydantic import BaseModel, Field, model_validator
 from typing import Dict, List, Optional, Any
 
+class TerrainTile(BaseModel):
+    """
+    Represents a single tactical node on the VTT battle map.
+    Provides strict typing for pathfinding, line of sight, and environmental physics.
+    """
+    x: int
+    y: int
+    tile_type: str = "floor"
+    tags: List[str] = Field(default_factory=list)
+
 class Item(BaseModel):
     """
     Represents an equippable or consumable item in the game world.

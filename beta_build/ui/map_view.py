@@ -222,8 +222,8 @@ class BattleMapCanvas(QGraphicsView):
         self.grid_data = grid
         for y, row in enumerate(grid):
             for x, node in enumerate(row):
-                # node is a Terrain Node dict
-                node_type = node.get("type", "floor") if isinstance(node, dict) else ("wall" if node == 1 else ("water" if node == 2 else "floor"))
+                # node is a TerrainTile dict
+                node_type = node.get("tile_type", "floor")
                 rect = QGraphicsRectItem(x * self.tile_size, y * self.tile_size, self.tile_size, self.tile_size)
                 
                 if node_type in ("wall", "obstacle"):
@@ -238,10 +238,7 @@ class BattleMapCanvas(QGraphicsView):
                 self.scene.addItem(rect)
                 self.tile_items[(x, y)] = rect
                     
-        # Add player at center
-        width = payload.get("width", 40)
-        height = payload.get("height", 40)
-        self.spawn_entity("player_1", width // 2, height // 2, "gold", "Wanderer")
+        # Note: Player spawn is now handled via SPAWN_ENTITY from main_window
         
         for ent in payload.get("entities", []):
             self.spawn_entity(
@@ -398,6 +395,8 @@ class MapCanvas(QWidget):
             name=payload.get("name", "Unknown"),
             tags=payload.get("tags", [])
         )
+        if payload.get("uuid") == "player_1":
+            self.bus.publish("SCENE_STABILIZED", {})
 
     def _on_move_entity(self, payload):
         self.battle_map.move_entity(

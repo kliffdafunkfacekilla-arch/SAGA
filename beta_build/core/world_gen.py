@@ -3,6 +3,8 @@ import logging
 import random
 from typing import Dict, Any
 
+from beta_build.core.models import TerrainTile
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("WorldGen")
 
@@ -47,35 +49,27 @@ class WorldGenerator:
             row = []
             for x in range(width):
                 if x == 0 or x == width - 1 or y == 0 or y == height - 1:
-                    row.append({
-                        "x": x, "y": y, "type": "wall", 
-                        "walkable": False, "cover_bonus": 5, 
-                        "description": "Thick treeline or border wall.",
-                        "tags": ["cover", "heavy", "stone", "blocks_los"]
-                    })
+                    row.append(TerrainTile(
+                        x=x, y=y, tile_type="wall", 
+                        tags=["cover", "heavy", "stone", "blocks_los"]
+                    ).model_dump())
                 else:
                     r = random.random()
                     if r < 0.05:
-                        row.append({
-                            "x": x, "y": y, "type": "obstacle", 
-                            "walkable": False, "cover_bonus": 3, 
-                            "description": "A heavy stone outcropping or ruin.",
-                            "tags": ["cover", "stone"]
-                        })
+                        row.append(TerrainTile(
+                            x=x, y=y, tile_type="obstacle", 
+                            tags=["cover", "stone"]
+                        ).model_dump())
                     elif r < 0.07:
-                        row.append({
-                            "x": x, "y": y, "type": "water", 
-                            "walkable": True, "cover_bonus": 0, 
-                            "description": "Waist-deep water. Difficult terrain.",
-                            "tags": ["water", "difficult_terrain", "conductive"]
-                        })
+                        row.append(TerrainTile(
+                            x=x, y=y, tile_type="water", 
+                            tags=["water", "difficult_terrain", "conductive"]
+                        ).model_dump())
                     else:
-                        row.append({
-                            "x": x, "y": y, "type": "floor", 
-                            "walkable": True, "cover_bonus": 0, 
-                            "description": "Open ground.",
-                            "tags": ["floor"]
-                        })
+                        row.append(TerrainTile(
+                            x=x, y=y, tile_type="floor", 
+                            tags=["floor"]
+                        ).model_dump())
             grid.append(row)
 
         # Inject dynamic entities if provided by the AI Director

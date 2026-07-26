@@ -105,6 +105,7 @@ class SagaDesktopApp(QMainWindow):
         self.bus.subscribe("GENERATE_AMBUSH_MAP", lambda p: self.world_gen_worker.request_generation(p.get("location"), True))
         
         self.bus.subscribe("MAP_PAYLOAD_READY", self._on_map_payload_ready)
+        self.bus.subscribe("SCENE_STABILIZED", self._on_scene_stabilized)
         self.bus.subscribe("COMBAT_RESOLVED", self._on_combat_resolved)
         
         self.bus.subscribe("AI_NARRATED", self._handle_ai_narrated)
@@ -173,8 +174,20 @@ class SagaDesktopApp(QMainWindow):
         """Called when WorldGen finishes. If entities are present, it's combat."""
         self.map_canvas._on_map_payload_ready(payload)
         
-        # Now that the map is ready, kick off the narrative campaign intro
-        self.bus.publish("LOAD_CAMPAIGN", {})
+        # Spawn the player in the center
+        width = payload.get("width", 40)
+        height = payload.get("height", 40)
+        self.bus.publish("SPAWN_ENTITY", {
+            "uuid": "player_1",
+            "x": width // 2,
+            "y": height // 2,
+            "color": "gold",
+            "name": self.player_character.name,
+            "tags": ["player"]
+        })
+        
+        # Now that the map is ready, we wait for the SCENE_STABILIZED signal 
+        # (which triggers when the player token drops) to kick off the narrative.
         
         # Start ambush if flagged
         if payload.get("is_ambush", False):
@@ -182,6 +195,11 @@ class SagaDesktopApp(QMainWindow):
                 "entities": payload.get("entities", []), 
                 "player_stats": self.player_character.stats
             })
+
+    def _on_scene_stabilized(self, payload):
+        """Called when the player is physically dropped onto the board."""
+        self.bus.publish("LOAD_CAMPAIGN", {})
+        self.bus.publish("INITIATE_BOOT_SEQUENCE", {"location": self._pending_boot_location})
 
     def _on_loot_acquired(self, payload):
         from beta_build.core.models import Item
@@ -198,6 +216,9 @@ class SagaDesktopApp(QMainWindow):
         """Handoff from Character Creation to the active Game Screen."""
         self.player_character = CharacterSheet(**payload)
         self._show_game()
+        
+        # Now trigger the map generation
+        self.bus.publish("GENERATE_SAFE_MAP", {"location": self._pending_boot_location})
 
     def _on_combat_resolved(self, payload):
         target = payload.get("target")
