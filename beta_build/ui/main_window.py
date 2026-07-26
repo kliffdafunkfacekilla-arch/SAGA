@@ -13,6 +13,7 @@ from beta_build.ai_services.director import AIDirector
 from beta_build.data.memory_store import MemoryStore
 from beta_build.core.world_gen_worker import WorldGenWorker
 from beta_build.core.journey_manager import JourneyManager
+from beta_build.core.action_resolver import ActionResolver
 
 # --- Frontend Components ---
 from beta_build.ui.char_creation import CharacterCreationScreen
@@ -94,6 +95,8 @@ class SagaDesktopApp(QMainWindow):
         
         self.bus.subscribe("GENERATE_SAFE_MAP", lambda p: self.world_gen_worker.request_generation(p.get("location"), False))
         self.bus.subscribe("GENERATE_AMBUSH_MAP", lambda p: self.world_gen_worker.request_generation(p.get("location"), True))
+        
+        self.bus.subscribe("COMBAT_RESOLVED", self._on_combat_resolved)
 
         # Background Workers Initialization
         self.init_workers()
@@ -104,6 +107,7 @@ class SagaDesktopApp(QMainWindow):
         self.ai_director = AIDirector(load_model=False)
         self.memory = MemoryStore()
         self.journey_manager = JourneyManager(self.bus)
+        self.action_resolver = ActionResolver(self.bus)
 
     def init_workers(self):
         """Initializes and connects QThreads for background AI and audio tasks."""
@@ -142,16 +146,88 @@ class SagaDesktopApp(QMainWindow):
         self.bus.publish("HUD_UPDATE", {"character": self.player_character.model_dump()})
         self.stack.setCurrentIndex(2)
 
+    def _on_combat_resolved(self, payload):
+        target = payload.get("target")
+        if target == self.player_character.name:
+            self.player_character.take_damage(payload.get("damage", 0), payload.get("is_physical", True))
+            if payload.get("trauma"):
+                self.player_character.trauma_tokens += 1
+            self.bus.publish("HUD_UPDATE", {"character": self.player_character.model_dump()})
+        else:
+            # In a full game, we'd update the specific NPC token on the map here
+            pass
+            
     def _handle_intent(self, payload):
         intent = payload.get("intent", "").strip()
+        if not intent: return
+        
+        # We don't want to show raw backend prompts in the UI
+        if not intent.startswith("COMBAT RESOLUTION:") and not intent.startswith("The player attempted to travel"):
+            self.map_canvas.log_view.append(f"<b>You:</b> {intent}")
         
         import re
         
-        match = re.search(r"(?:travel to|head to|go to)\s+([a-zA-Z\s]+)", intent, re.IGNORECASE)
-        if match:
-            location = match.group(1).strip()
+        match_travel = re.search(r"(?:travel to|head to|go to)\s+([a-zA-Z\s]+)", intent, re.IGNORECASE)
+        if match_travel:
+            location = match_travel.group(1).strip()
             self.map_canvas.log_view.append(f"\n<i>Traveling to {location}...</i>\n")
             self.bus.publish("TRAVEL_REQUESTED", {"location": location, "stats": self.player_character.stats})
+            return
+            
+        match_combat = re.search(r"(?:attack|strike|hit|intimidate|fear)\s+([a-zA-Z\s]+)", intent, re.IGNORECASE)
+        if match_combat and not intent.startswith("COMBAT RESOLUTION:"):
+            target = match_combat.group(1).strip()
+            
+            # Very basic parsing for demo: check if it's a mental attack
+            is_mental = "intimidate" in intent.lower() or "fear" in intent.lower()
+            
+            weapon_mod = 0
+            if self.player_character.inventory.slots.get("weapon"):
+                weapon_mod += self.player_character.inventory.slots["weapon"].modifier
+                
+            armor_mod = 0
+            if is_mental:
+                for slot in self.player_character.inventory.mental_slots:
+                    item = self.player_character.inventory.slots.get(slot)
+                    if item: armor_mod += item.armor_mod
+            else:
+                for slot in self.player_character.inventory.physical_slots:
+                    item = self.player_character.inventory.slots.get(slot)
+                    if item: armor_mod += item.armor_mod
+            
+            # Extract defender's terrain tags and cover from Map Canvas
+            defender_tags = []
+            defender_cover = 0
+            for uid, ent in self.map_canvas.battle_map.entities.items():
+                if target.lower() in ent.name.lower():
+                    tx = int(ent.pos().x() // self.map_canvas.battle_map.tile_size)
+                    ty = int(ent.pos().y() // self.map_canvas.battle_map.tile_size)
+                    try:
+                        node = self.map_canvas.battle_map.grid_data[ty][tx]
+                        if isinstance(node, dict):
+                            defender_tags.extend(node.get("tags", []))
+                            defender_cover = node.get("cover_bonus", 0)
+                        
+                        # Add entity's own tags too
+                        if hasattr(ent, 'tags'):
+                            defender_tags.extend(ent.tags)
+                    except (IndexError, AttributeError):
+                        pass
+                    break
+                    
+            combat_payload = {
+                "attacker": self.player_character.name,
+                "attacker_tags": self.player_character.tags,
+                "defender": target,
+                "defender_tags": defender_tags,
+                "offense_stat": self.player_character.stats.get("might", 5) if not is_mental else self.player_character.stats.get("willpower", 5),
+                "weapon_mod": weapon_mod,
+                "defense_stat": 4, # Example enemy stat
+                "armor_mod": 1, # Example enemy armor
+                "cover_bonus": defender_cover,
+                "is_physical": not is_mental
+            }
+            self.bus.publish("COMBAT_ACTION_DECLARED", combat_payload)
             return
             
         self.map_canvas.log_view.append("\n<i>Narrator is thinking...</i>\n")

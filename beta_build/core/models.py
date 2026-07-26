@@ -68,6 +68,7 @@ class CharacterSheet(BaseModel):
     level: int = 1
     xp: int = 0
     skills: List[str] = Field(default_factory=list)
+    tags: List[str] = Field(default_factory=list)
     unspent_stat_points: int = 0
     unspent_skill_points: int = 0
     
@@ -102,3 +103,19 @@ class CharacterSheet(BaseModel):
         self.active_focus = min(self.active_focus, self.max_focus)
         
         return self
+
+    def take_damage(self, amount: int, is_physical: bool = True):
+        if amount <= 0:
+            return
+            
+        if is_physical:
+            self.current_hp -= amount
+            if self.current_hp <= 0:
+                self.current_hp = 0
+                self.is_zero_state = True
+        else:
+            self.current_composure -= amount
+            if self.current_composure <= 0:
+                self.current_composure = 0
+                self.is_zero_state = True
+

@@ -41,22 +41,41 @@ class WorldGenerator:
             biome = "town"
             # We could read elevation, temperature, etc. here for more precision
 
-        # Generate a simple grid (0 = walkable, 1 = obstacle, 2 = water, etc)
+        # Generate a rich Terrain Node grid
         grid = []
         for y in range(height):
             row = []
             for x in range(width):
-                # Basic noise for borders and scatter
                 if x == 0 or x == width - 1 or y == 0 or y == height - 1:
-                    row.append(1) # Border walls/trees
+                    row.append({
+                        "x": x, "y": y, "type": "wall", 
+                        "walkable": False, "cover_bonus": 5, 
+                        "description": "Thick treeline or border wall.",
+                        "tags": ["cover", "heavy", "stone"]
+                    })
                 else:
-                    # Random scatter
-                    val = 0
-                    if random.random() < 0.05:
-                        val = 1 # Obstacle
-                    elif random.random() < 0.02:
-                        val = 2 # Water puddle
-                    row.append(val)
+                    r = random.random()
+                    if r < 0.05:
+                        row.append({
+                            "x": x, "y": y, "type": "obstacle", 
+                            "walkable": False, "cover_bonus": 3, 
+                            "description": "A heavy stone outcropping or ruin.",
+                            "tags": ["cover", "stone"]
+                        })
+                    elif r < 0.07:
+                        row.append({
+                            "x": x, "y": y, "type": "water", 
+                            "walkable": True, "cover_bonus": 0, 
+                            "description": "Waist-deep water. Difficult terrain.",
+                            "tags": ["water", "difficult_terrain", "conductive"]
+                        })
+                    else:
+                        row.append({
+                            "x": x, "y": y, "type": "floor", 
+                            "walkable": True, "cover_bonus": 0, 
+                            "description": "Open ground.",
+                            "tags": ["floor"]
+                        })
             grid.append(row)
 
         # In a real scenario, we'd place actual entities from the lore
@@ -69,7 +88,8 @@ class WorldGenerator:
                     "y": random.randint(5, height - 5),
                     "sprite": "hostile",
                     "name": "Bandit",
-                    "personality": "hostile"
+                    "personality": "hostile",
+                    "tags": ["humanoid", "hostile", "bandit"]
                 })
         elif biome == "town":
             entities.append({
@@ -78,7 +98,8 @@ class WorldGenerator:
                 "y": height // 2,
                 "sprite": "vendor",
                 "name": "Local Merchant",
-                "personality": "vendor"
+                "personality": "vendor",
+                "tags": ["humanoid", "civilian", "merchant"]
             })
 
         map_name = f"Wilderness Ambush near {location_name}" if is_ambush else (location_name if burg_data else f"Wilderness near {location_name}")

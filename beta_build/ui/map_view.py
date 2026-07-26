@@ -4,7 +4,7 @@ Provides the MapCanvas and BattleMapCanvas components for the left-hand panel of
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QTextEdit, QLineEdit, QGraphicsView, 
                              QGraphicsScene, QMenu, QGraphicsEllipseItem, QGraphicsItem, QGraphicsTextItem, QGraphicsRectItem)
-from PyQt6.QtCore import Qt, pyqtSlot, QRectF
+from PyQt6.QtCore import Qt, pyqtSlot, QRectF, QTimer
 from PyQt6.QtGui import QBrush, QColor, QPen, QPainter
 
 from beta_build.ui.sprite_manager import SpriteManager
@@ -12,11 +12,12 @@ from beta_build.ui.hud import CharacterHUD, StoryTracker
 
 class TokenItem(QGraphicsEllipseItem):
     """Dynamic map token representing an entity (player, monster, etc)."""
-    def __init__(self, x, y, size, color, name, uuid, parent=None):
+    def __init__(self, x, y, size, color, name, uuid, tags=None, parent=None):
         super().__init__(0, 0, size, size, parent)
         self.setPos(x * size, y * size)
         self.uuid = uuid
         self.name = name
+        self.tags = tags or []
         
         self.setBrush(QBrush(QColor(color)))
         self.setPen(QPen(QColor("white"), 2))
@@ -25,9 +26,27 @@ class TokenItem(QGraphicsEllipseItem):
         self.label = QGraphicsTextItem(name, self)
         self.label.setDefaultTextColor(QColor("white"))
         self.label.setPos(0, -15)
+        
+        self.original_color = QColor(color)
+        self.is_dead = False
 
     def move_to_grid(self, x, y, size):
-        self.setPos(x * size, y * size)
+        if not self.is_dead:
+            self.setPos(x * size, y * size)
+            
+    def flash_damage(self):
+        if self.is_dead: return
+        self.setBrush(QBrush(QColor("white")))
+        # Revert color after 150ms
+        QTimer.singleShot(150, lambda: self.setBrush(QBrush(self.original_color)) if not self.is_dead else None)
+        
+    def set_dead(self):
+        self.is_dead = True
+        self.setBrush(QBrush(QColor("#333333")))
+        self.setPen(QPen(QColor("#555555"), 1))
+        self.label.setDefaultTextColor(QColor("#555555"))
+        # Move to background so living tokens walk over it
+        self.setZValue(-1)
 
 class BattleMapCanvas(QGraphicsView):
     """
@@ -81,12 +100,12 @@ class BattleMapCanvas(QGraphicsView):
             
         self.scale(zoom_factor, zoom_factor)
 
-    def spawn_entity(self, uuid: str, x: int, y: int, color: str, name: str):
+    def spawn_entity(self, uuid: str, x: int, y: int, color: str, name: str, tags: list = None):
         if uuid in self.entities:
             self.move_entity(uuid, x, y)
             return
             
-        token = TokenItem(x, y, self.tile_size, color, name, uuid)
+        token = TokenItem(x, y, self.tile_size, color, name, uuid, tags)
         self.scene.addItem(token)
         self.entities[uuid] = token
         
@@ -98,6 +117,14 @@ class BattleMapCanvas(QGraphicsView):
         if uuid in self.entities:
             token = self.entities.pop(uuid)
             self.scene.removeItem(token)
+            
+    def damage_entity(self, uuid: str):
+        if uuid in self.entities:
+            self.entities[uuid].flash_damage()
+            
+    def kill_entity(self, uuid: str):
+        if uuid in self.entities:
+            self.entities[uuid].set_dead()
 
     def load_generated_payload(self, payload: dict):
         """Loads a generated grid and entities from the WorldGenWorker."""
@@ -105,14 +132,17 @@ class BattleMapCanvas(QGraphicsView):
         self.entities.clear()
         
         grid = payload.get("grid", [])
+        self.grid_data = grid
         for y, row in enumerate(grid):
-            for x, val in enumerate(row):
-                if val == 1: # Obstacle
+            for x, node in enumerate(row):
+                # node is a Terrain Node dict
+                node_type = node.get("type", "floor") if isinstance(node, dict) else ("wall" if node == 1 else ("water" if node == 2 else "floor"))
+                if node_type in ("wall", "obstacle"):
                     rect = QGraphicsRectItem(x * self.tile_size, y * self.tile_size, self.tile_size, self.tile_size)
                     rect.setBrush(QBrush(QColor("#444444")))
                     rect.setPen(QPen(Qt.PenStyle.NoPen))
                     self.scene.addItem(rect)
-                elif val == 2: # Water
+                elif node_type == "water":
                     rect = QGraphicsRectItem(x * self.tile_size, y * self.tile_size, self.tile_size, self.tile_size)
                     rect.setBrush(QBrush(QColor("#113355")))
                     rect.setPen(QPen(Qt.PenStyle.NoPen))
@@ -129,7 +159,8 @@ class BattleMapCanvas(QGraphicsView):
                 x=ent.get("x", 0),
                 y=ent.get("y", 0),
                 color="red",
-                name=ent.get("name", "Unknown")
+                name=ent.get("name", "Unknown"),
+                tags=ent.get("tags", [])
             )
 
     def mousePressEvent(self, event):
@@ -264,6 +295,8 @@ class MapCanvas(QWidget):
         self.bus.subscribe("SPAWN_ENTITY", self._on_spawn_entity)
         self.bus.subscribe("MOVE_ENTITY", self._on_move_entity)
         self.bus.subscribe("REMOVE_ENTITY", self._on_remove_entity)
+        self.bus.subscribe("ENTITY_DAMAGED", self._on_entity_damaged)
+        self.bus.subscribe("ENTITY_DIED", self._on_entity_died)
         self.bus.subscribe("MAP_PAYLOAD_READY", self._on_map_payload_ready)
 
     def _on_spawn_entity(self, payload):
@@ -272,7 +305,8 @@ class MapCanvas(QWidget):
             x=payload.get("x", 0),
             y=payload.get("y", 0),
             color=payload.get("color", "red"),
-            name=payload.get("name", "Unknown")
+            name=payload.get("name", "Unknown"),
+            tags=payload.get("tags", [])
         )
 
     def _on_move_entity(self, payload):
@@ -284,6 +318,12 @@ class MapCanvas(QWidget):
 
     def _on_remove_entity(self, payload):
         self.battle_map.remove_entity(payload.get("uuid"))
+
+    def _on_entity_damaged(self, payload):
+        self.battle_map.damage_entity(payload.get("uuid"))
+        
+    def _on_entity_died(self, payload):
+        self.battle_map.kill_entity(payload.get("uuid"))
 
     def _on_map_payload_ready(self, payload):
         name = payload.get("name", "Unknown")
