@@ -9,6 +9,7 @@ from PyQt6.QtGui import QBrush, QColor, QPen, QPainter
 
 from beta_build.ui.sprite_manager import SpriteManager
 from beta_build.ui.hud import CharacterHUD, StoryTracker
+from beta_build.core.fov_calculator import calculate_fov
 
 class TokenItem(QGraphicsEllipseItem):
     """Dynamic map token representing an entity (player, monster, etc)."""
@@ -63,6 +64,9 @@ class BattleMapCanvas(QGraphicsView):
         
         self.tile_size = 32
         self.entities = {} # Map of UUID -> TokenItem
+        self.tile_items = {} # Map of (x,y) -> QGraphicsRectItem
+        self.explored = set()
+        self.visible_tiles = set()
         
         # Enable dragging/panning
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
@@ -106,12 +110,29 @@ class BattleMapCanvas(QGraphicsView):
             return
             
         token = TokenItem(x, y, self.tile_size, color, name, uuid, tags)
+        
+        # Initially hide if not player and not in visible
+        if uuid != "player_1":
+            if (x, y) not in self.visible_tiles:
+                token.setVisible(False)
+                
         self.scene.addItem(token)
         self.entities[uuid] = token
+        
+        if uuid == "player_1":
+            self.update_fov(x, y, 7) # Example radius
         
     def move_entity(self, uuid: str, x: int, y: int):
         if uuid in self.entities:
             self.entities[uuid].move_to_grid(x, y, self.tile_size)
+            if uuid == "player_1":
+                self.update_fov(x, y, 7)
+            else:
+                # Update visibility of NPC if it moved
+                if (x, y) in self.visible_tiles:
+                    self.entities[uuid].setVisible(True)
+                else:
+                    self.entities[uuid].setVisible(False)
             
     def remove_entity(self, uuid: str):
         if uuid in self.entities:
@@ -125,11 +146,40 @@ class BattleMapCanvas(QGraphicsView):
     def kill_entity(self, uuid: str):
         if uuid in self.entities:
             self.entities[uuid].set_dead()
+            
+    def update_fov(self, px: int, py: int, radius: int):
+        """Calculates FOV and updates tile/token opacities."""
+        if not hasattr(self, 'grid_data'): return
+        
+        self.visible_tiles = calculate_fov(self.grid_data, px, py, radius)
+        self.explored.update(self.visible_tiles)
+        
+        # Update tile opacities
+        for (tx, ty), rect in self.tile_items.items():
+            if (tx, ty) in self.visible_tiles:
+                rect.setOpacity(1.0)
+            elif (tx, ty) in self.explored:
+                rect.setOpacity(0.3)
+            else:
+                rect.setOpacity(0.0)
+                
+        # Update token visibilities
+        for uid, token in self.entities.items():
+            if uid == "player_1": continue
+            tx = int(token.pos().x() // self.tile_size)
+            ty = int(token.pos().y() // self.tile_size)
+            if (tx, ty) in self.visible_tiles:
+                token.setVisible(True)
+            else:
+                token.setVisible(False)
 
     def load_generated_payload(self, payload: dict):
         """Loads a generated grid and entities from the WorldGenWorker."""
         self.scene.clear()
         self.entities.clear()
+        self.tile_items.clear()
+        self.explored.clear()
+        self.visible_tiles.clear()
         
         grid = payload.get("grid", [])
         self.grid_data = grid
@@ -137,16 +187,19 @@ class BattleMapCanvas(QGraphicsView):
             for x, node in enumerate(row):
                 # node is a Terrain Node dict
                 node_type = node.get("type", "floor") if isinstance(node, dict) else ("wall" if node == 1 else ("water" if node == 2 else "floor"))
+                rect = QGraphicsRectItem(x * self.tile_size, y * self.tile_size, self.tile_size, self.tile_size)
+                
                 if node_type in ("wall", "obstacle"):
-                    rect = QGraphicsRectItem(x * self.tile_size, y * self.tile_size, self.tile_size, self.tile_size)
                     rect.setBrush(QBrush(QColor("#444444")))
-                    rect.setPen(QPen(Qt.PenStyle.NoPen))
-                    self.scene.addItem(rect)
                 elif node_type == "water":
-                    rect = QGraphicsRectItem(x * self.tile_size, y * self.tile_size, self.tile_size, self.tile_size)
                     rect.setBrush(QBrush(QColor("#113355")))
-                    rect.setPen(QPen(Qt.PenStyle.NoPen))
-                    self.scene.addItem(rect)
+                else:
+                    rect.setBrush(QBrush(QColor("#1a1a1a"))) # Floor
+                    
+                rect.setPen(QPen(Qt.PenStyle.NoPen))
+                rect.setOpacity(0.0) # Start fully unexplored
+                self.scene.addItem(rect)
+                self.tile_items[(x, y)] = rect
                     
         # Add player at center
         width = payload.get("width", 40)

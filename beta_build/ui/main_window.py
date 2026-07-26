@@ -14,6 +14,8 @@ from beta_build.data.memory_store import MemoryStore
 from beta_build.core.world_gen_worker import WorldGenWorker
 from beta_build.core.journey_manager import JourneyManager
 from beta_build.core.action_resolver import ActionResolver
+from beta_build.core.combat_manager import CombatManager
+from beta_build.core.campaign_manager import CampaignManager
 
 # --- Frontend Components ---
 from beta_build.ui.char_creation import CharacterCreationScreen
@@ -91,23 +93,26 @@ class SagaDesktopApp(QMainWindow):
 
         # Intent Execution Sub
         self.bus.subscribe("EXECUTE_INTENT", self._handle_intent)
+        self.bus.subscribe("EXECUTE_AI_INTENT", self._handle_ai_intent)
         self.bus.subscribe("UI_TOGGLE_MIC", self._handle_mic_toggle)
         
         self.bus.subscribe("GENERATE_SAFE_MAP", lambda p: self.world_gen_worker.request_generation(p.get("location"), False))
         self.bus.subscribe("GENERATE_AMBUSH_MAP", lambda p: self.world_gen_worker.request_generation(p.get("location"), True))
         
+        self.bus.subscribe("MAP_PAYLOAD_READY", self._on_map_payload_ready)
         self.bus.subscribe("COMBAT_RESOLVED", self._on_combat_resolved)
 
         # Background Workers Initialization
         self.init_workers()
         
         # Core State
-        # Core State
         self.player_character = CharacterSheet(name="Wanderer")
         self.ai_director = AIDirector(load_model=False)
         self.memory = MemoryStore()
         self.journey_manager = JourneyManager(self.bus)
         self.action_resolver = ActionResolver(self.bus)
+        self.combat_manager = CombatManager(self.bus)
+        self.campaign_manager = CampaignManager(self.bus)
 
     def init_workers(self):
         """Initializes and connects QThreads for background AI and audio tasks."""
@@ -139,6 +144,17 @@ class SagaDesktopApp(QMainWindow):
         self.stack.setCurrentIndex(2)
         # Hook up the Pydantic character state to the UI HUD
         self.bus.publish("HUD_UPDATE", {"character": self.player_character.model_dump()})
+        self.bus.publish("LOAD_CAMPAIGN", {})
+
+    def _on_map_payload_ready(self, payload):
+        """Called when WorldGen finishes. If entities are present, it's combat."""
+        entities = payload.get("entities", [])
+        if entities:
+            # Short delay so UI can render them first
+            self.bus.publish("COMBAT_START", {
+                "entities": entities, 
+                "player_stats": self.player_character.stats
+            })
 
     def _on_player_created(self, payload):
         """Handoff from Character Creation to the active Game Screen."""
@@ -249,6 +265,14 @@ class SagaDesktopApp(QMainWindow):
         )
         self.llm_worker.request_generation(prompt=prompt, tag="narrative")
 
+    def _handle_ai_intent(self, payload):
+        intent = payload.get("intent", "")
+        
+        self.map_canvas.log_view.append("\n<i>AI Director is generating...</i>\n")
+        self.map_canvas.log_view.append("<font color='#ff5555'>[AI]:</font> ")
+        
+        self.llm_worker.request_generation(prompt=intent, tag="narrative")
+
     def _handle_mic_toggle(self, payload):
         if payload.get("active", False):
             if not self.stt_worker.isRunning():
@@ -263,6 +287,8 @@ class SagaDesktopApp(QMainWindow):
             self.tts_worker.speak(full_text)
             # Store the final generated narrative into long-term memory
             self.memory.store_event(text=full_text, metadata={"type": tag})
+            
+        self.bus.publish("END_TURN")
 
     def closeEvent(self, event):
         """Ensure threads are properly closed when shutting down."""

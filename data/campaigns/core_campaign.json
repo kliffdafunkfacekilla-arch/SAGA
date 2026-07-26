@@ -1,0 +1,35 @@
+{
+  "campaign_name": "The Wastes of Aloa",
+  "acts": [
+    {
+      "act_id": 1,
+      "title": "The Awakening",
+      "nodes": [
+        {
+          "node_id": "intro_01",
+          "title": "The Scavenger's Camp",
+          "description": "The player awakens in a ransacked camp. They must find their gear and survive the first night.",
+          "is_major_plot_point": true,
+          "dynamic_slots": 0,
+          "next_nodes": ["journey_to_settlement"]
+        },
+        {
+          "node_id": "journey_to_settlement",
+          "title": "The Long Road",
+          "description": "The arduous trek across the irradiated dunes towards the nearest bastion of humanity.",
+          "is_major_plot_point": false,
+          "dynamic_slots": 3,
+          "next_nodes": ["arrival_at_bastion"]
+        },
+        {
+          "node_id": "arrival_at_bastion",
+          "title": "Gates of Bastion",
+          "description": "The player arrives at the heavily fortified town, but entry requires passing a harsh trial or paying a steep bribe.",
+          "is_major_plot_point": true,
+          "dynamic_slots": 0,
+          "next_nodes": []
+        }
+      ]
+    }
+  ]
+}

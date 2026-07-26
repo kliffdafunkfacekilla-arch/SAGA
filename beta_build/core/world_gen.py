@@ -51,7 +51,7 @@ class WorldGenerator:
                         "x": x, "y": y, "type": "wall", 
                         "walkable": False, "cover_bonus": 5, 
                         "description": "Thick treeline or border wall.",
-                        "tags": ["cover", "heavy", "stone"]
+                        "tags": ["cover", "heavy", "stone", "blocks_los"]
                     })
                 else:
                     r = random.random()
