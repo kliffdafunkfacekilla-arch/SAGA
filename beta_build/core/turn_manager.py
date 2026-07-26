@@ -52,6 +52,8 @@ class TurnManager:
         }
         logger.info(f"Turn started for {entity_uuid}.")
         self.bus.publish("TURN_STARTED", {"uuid": entity_uuid})
+        if entity_uuid == "player_1":
+            self.bus.publish("BEAT_UPDATE", {"beats": self.beats})
         
     def end_turn(self, entity_uuid: str) -> bool:
         """Ends the turn for the given entity, passing to the next."""
@@ -82,6 +84,8 @@ class TurnManager:
             
         if beat_type in self.beats and self.beats[beat_type]:
             self.beats[beat_type] = False
+            if entity_uuid == "player_1":
+                self.bus.publish("BEAT_UPDATE", {"beats": self.beats})
             return True
             
         return False

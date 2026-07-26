@@ -382,6 +382,10 @@ class MapCanvas(QWidget):
         self.btn_camp.setStyleSheet("padding: 10px; font-size: 16px; background-color: #773333; color: white; font-weight: bold;")
         self.btn_camp.clicked.connect(lambda: self.bus.publish("UI_LONG_REST"))
         
+        self.btn_world = QPushButton("World Map")
+        self.btn_world.setStyleSheet("padding: 10px; font-size: 16px; background-color: #337755; color: white; font-weight: bold;")
+        self.btn_world.clicked.connect(lambda: self.bus.publish("UI_REQUEST_WORLD_MAP"))
+        
         self.btn_mic = QPushButton("🎙️ Mic: OFF")
         self.btn_mic.setCheckable(True)
         self.btn_mic.setStyleSheet("padding: 10px; font-size: 16px; background-color: #222; color: #888; border: 1px solid #555;")
@@ -391,6 +395,7 @@ class MapCanvas(QWidget):
         input_layout.addWidget(self.input_field)
         input_layout.addWidget(self.btn_submit)
         input_layout.addWidget(self.btn_char)
+        input_layout.addWidget(self.btn_world)
         input_layout.addWidget(self.btn_stealth)
         input_layout.addWidget(self.btn_dm)
         input_layout.addWidget(self.btn_camp)
@@ -413,6 +418,7 @@ class MapCanvas(QWidget):
         
         self.bus.subscribe("MAP_RENDER", self._on_map_render)
         self.bus.subscribe("HUD_UPDATE", self._on_hud_update)
+        self.bus.subscribe("BEAT_UPDATE", lambda p: self.hud.update_beats(p.get("beats", {})))
         self.bus.subscribe("PLAYER_ACTION_UI_INJECT", self._handle_ui_inject)
         
         self.bus.subscribe("SPAWN_ENTITY", self._on_spawn_entity)

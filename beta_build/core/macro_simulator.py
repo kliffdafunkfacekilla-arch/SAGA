@@ -109,6 +109,71 @@ class MacroSimulator:
             
         return results
 
+    def get_burg_coords(self, burg_name: str) -> tuple[float, float]:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT x, y FROM burgs WHERE LOWER(burg) = LOWER(?)", (burg_name,))
+        row = cursor.fetchone()
+        if row:
+            return float(row["x"]), float(row["y"])
+        return 0.0, 0.0
+        
+    def get_nearest_burg(self, x: float, y: float) -> str:
+        cursor = self.conn.cursor()
+        # Find the nearest burg by simple euclidean distance squared
+        cursor.execute("SELECT burg, x, y FROM burgs")
+        burgs = cursor.fetchall()
+        
+        nearest_burg = "Wilderness"
+        min_dist = float('inf')
+        for b in burgs:
+            try:
+                bx, by = float(b["x"]), float(b["y"])
+                dist = (bx - x)**2 + (by - y)**2
+                if dist < min_dist:
+                    min_dist = dist
+                    nearest_burg = b["burg"]
+            except ValueError:
+                continue # Skip if x/y aren't floats
+                
+        return nearest_burg
+
+    def get_location_context(self, x: float, y: float) -> str:
+        nearest_burg = self.get_nearest_burg(x, y)
+        
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT feature_type, properties_json 
+            FROM spatial_features 
+            WHERE ? BETWEEN min_x AND max_x AND ? BETWEEN min_y AND max_y
+        ''', (x, y))
+        
+        features = cursor.fetchall()
+        context = f"Near {nearest_burg}"
+        
+        found_features = []
+        for f in features:
+            try:
+                props = json.loads(f["properties_json"])
+                if "name" in props and props["name"]:
+                    found_features.append(f"{props['name']} ({f['feature_type']})")
+                elif "type" in props and props["type"]:
+                    found_features.append(f"{props['type']} ({f['feature_type']})")
+            except Exception:
+                pass
+                
+        if found_features:
+            context += f" [Features: {', '.join(found_features)}]"
+            
+        return context
+        
+    def get_all_burgs(self) -> list:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT burg, x, y, population, state FROM burgs")
+        results = []
+        for row in cursor.fetchall():
+            results.append(dict(row))
+        return results
+
     def __del__(self):
         if hasattr(self, 'conn'):
             self.conn.close()

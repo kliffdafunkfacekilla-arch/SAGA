@@ -28,7 +28,7 @@ from beta_build.core.zone_manager import ZoneManager
 from beta_build.core.command_parser import CommandParser
 from beta_build.core.enemy_ai import EnemyAIEngine
 from beta_build.ui.map_view import MapCanvas
-from beta_build.ui.screens import StartMenu, VendorScreen
+from beta_build.ui.screens import StartMenu, VendorScreen, WorldMapScreen
 
 class SagaDesktopApp(QMainWindow):
     """
@@ -102,6 +102,12 @@ class SagaDesktopApp(QMainWindow):
         
         self.bus.subscribe("UI_OPEN_VENDOR", lambda p: self.stack.setCurrentIndex(4))
         self.bus.subscribe("UI_CLOSE_VENDOR", lambda p: self.stack.setCurrentIndex(2))
+        
+        self.bus.subscribe("UI_OPEN_WORLD_MAP", lambda p: self.stack.setCurrentIndex(5))
+        self.bus.subscribe("UI_CLOSE_WORLD_MAP", lambda p: self.stack.setCurrentIndex(2))
+        
+        self.bus.subscribe("UI_REQUEST_WORLD_MAP", self._on_request_world_map)
+        self.bus.subscribe("EDGE_TRANSITION_REQUESTED", self._on_edge_transition_requested)
 
         # Intent Execution Sub
         self.bus.subscribe("EXECUTE_INTENT", self._handle_intent)
@@ -122,6 +128,9 @@ class SagaDesktopApp(QMainWindow):
         
         self.bus.subscribe("GENERATE_NEXT_NODE", self._handle_generate_next_node)
         self.bus.subscribe("EVALUATE_WORLD_MUTATION", self._handle_world_mutation)
+        
+        self.bus.subscribe("UI_INVENTORY_EQUIP", self._on_inventory_equip)
+        self.bus.subscribe("UI_INVENTORY_UNEQUIP", self._on_inventory_unequip)
 
         # Background Workers Initialization
         self.init_workers()
@@ -144,6 +153,12 @@ class SagaDesktopApp(QMainWindow):
         self.combat_manager = CombatManager(self.bus)
         self.macro_simulator = MacroSimulator()
         self.campaign_manager = CampaignManager(self.bus, self.macro_simulator)
+        
+        self.world_map_screen = WorldMapScreen(self.bus, self.macro_simulator)
+        self.stack.addWidget(self.world_map_screen) # 5
+        
+        self.macro_x = 0.0
+        self.macro_y = 0.0
         
         self.bus.subscribe("WORLD_TICK", lambda p: self.macro_simulator.simulate_tick())
 
@@ -194,8 +209,45 @@ class SagaDesktopApp(QMainWindow):
             
         self.map_canvas.log_view.append("<i><font color='#a0a0a0'>Engine booting. The AI Game Master is designing the world...</font></i>\n")
         
+    def _on_request_world_map(self, payload):
+        self.bus.publish("UI_OPEN_WORLD_MAP", {
+            "player_macro_x": self.macro_x, 
+            "player_macro_y": self.macro_y
+        })
+        
+    def _on_edge_transition_requested(self, payload):
+        direction = payload.get("direction", "north")
+        
+        # Define travel step in macro coordinates
+        step_size = 5.0
+        
+        if direction == "north":
+            self.macro_y -= step_size
+        elif direction == "south":
+            self.macro_y += step_size
+        elif direction == "east":
+            self.macro_x += step_size
+        elif direction == "west":
+            self.macro_x -= step_size
+            
+        location_context = self.macro_simulator.get_location_context(self.macro_x, self.macro_y)
+        self.bus.publish("SYSTEM_LOG", {"message": f"<font color='#00FF00'>[SYSTEM] Traveling {direction}. Entering: {location_context}.</font>"})
+        
+        stats = self.player_character.stats if self.player_character else {}
+        self._pending_boot_location = location_context
+        
+        self.bus.publish("TRAVEL_REQUESTED", {"location": location_context, "stats": stats})
+
+    def _show_game(self, payload):
+        """Displays the main Map Canvas."""
+        self.stack.setCurrentIndex(2)
+        
         # 1. Generate the base map IMMEDIATELY so the user isn't staring at a blank screen
         location = "Aloa"
+        if not payload.get("map_data"):
+            # Set initial macro coordinates based on boot location
+            self.macro_x, self.macro_y = self.macro_simulator.get_burg_coords(location)
+            
         self._pending_boot_location = location
         self.bus.publish("GENERATE_SAFE_MAP", {"location": location})
 
@@ -299,6 +351,40 @@ class SagaDesktopApp(QMainWindow):
         
         intent_prompt = f"LOOT ACQUIRED: The player picked up {item.name}. Generate a brief narrative about them finding it."
         self.bus.publish("EXECUTE_INTENT", {"intent": intent_prompt})
+
+    def _on_inventory_equip(self, payload):
+        if not self.player_character: return
+        index = payload.get("index")
+        bag = self.player_character.inventory.bag
+        
+        if 0 <= index < len(bag):
+            item = bag.pop(index)
+            # Find appropriate slot based on item_type
+            target_slot = item.item_type
+            # Handle weapons vs shields vs secondary, default to "weapon" if item_type is weapon
+            if target_slot not in self.player_character.inventory.slots:
+                # If the item_type isn't an exact slot match, use gear_category or default to body
+                target_slot = "bag" # fallback
+                
+            if target_slot in self.player_character.inventory.slots:
+                old_item = self.player_character.inventory.slots.get(target_slot)
+                if old_item:
+                    bag.append(old_item)
+                self.player_character.inventory.slots[target_slot] = item
+                self.bus.publish("HUD_UPDATE", {"character": self.player_character.model_dump()})
+                self.bus.publish("SYSTEM_LOG", {"message": f"<font color='#00FFFF'><b>Equipped:</b> {item.name}</font>"})
+
+    def _on_inventory_unequip(self, payload):
+        if not self.player_character: return
+        slot = payload.get("slot")
+        
+        if slot in self.player_character.inventory.slots:
+            item = self.player_character.inventory.slots[slot]
+            if item:
+                self.player_character.inventory.slots[slot] = None
+                self.player_character.inventory.bag.append(item)
+                self.bus.publish("HUD_UPDATE", {"character": self.player_character.model_dump()})
+                self.bus.publish("SYSTEM_LOG", {"message": f"<font color='#FFAA00'><b>Unequipped:</b> {item.name}</font>"})
 
     def _on_player_created(self, payload):
         """Handoff from Character Creation to the active Game Screen."""

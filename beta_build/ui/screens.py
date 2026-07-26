@@ -1,7 +1,8 @@
 """
 Provides the StartMenu, VendorScreen, and other full-screen UI views.
 """
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QTextEdit, QLineEdit
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QTextEdit, QLineEdit, QGraphicsView, QGraphicsScene
+from PyQt6.QtGui import QPainter, QPen, QBrush, QColor
 from PyQt6.QtCore import Qt
 
 class StartMenu(QWidget):
@@ -94,3 +95,62 @@ class VendorScreen(QWidget):
         if item_name:
             self.bus.publish("VENDOR_BUY_ITEM", {"item_name": item_name})
             self.buy_input.clear()
+
+class WorldMapScreen(QWidget):
+    """
+    A view-only Macro Map Atlas that queries okasha.sqlite and plots burgs.
+    """
+    def __init__(self, bus, macro_simulator):
+        super().__init__()
+        self.bus = bus
+        self.macro_simulator = macro_simulator
+        self.layout = QVBoxLayout()
+        
+        self.title = QLabel("World Atlas")
+        self.title.setStyleSheet("font-size: 24px; font-weight: bold; color: #88CCFF;")
+        
+        self.view = QGraphicsView()
+        self.scene = QGraphicsScene()
+        self.view.setScene(self.scene)
+        self.view.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.view.setStyleSheet("background-color: #111; border: 1px solid #555;")
+        self.view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        
+        btn_leave = QPushButton("Close Map")
+        btn_leave.setStyleSheet("padding: 10px; background-color: #552222; color: white;")
+        btn_leave.clicked.connect(lambda: self.bus.publish("UI_CLOSE_WORLD_MAP"))
+        
+        self.layout.addWidget(self.title)
+        self.layout.addWidget(self.view)
+        self.layout.addWidget(btn_leave)
+        self.setLayout(self.layout)
+        
+        self.bus.subscribe("UI_OPEN_WORLD_MAP", self._on_open_map)
+        
+    def _on_open_map(self, payload):
+        self.scene.clear()
+        burgs = self.macro_simulator.get_all_burgs()
+        
+        # Plot all burgs
+        pen = QPen(Qt.GlobalColor.white)
+        brush = QBrush(QColor(100, 150, 255))
+        for b in burgs:
+            try:
+                x, y = float(b["x"]), float(b["y"])
+                # We can draw them as small ellipses. The DB coords might be large (0 to 4000)
+                # so the scene rect will just scale to fit them.
+                circle = self.scene.addEllipse(x, y, 10, 10, pen, brush)
+                circle.setToolTip(f"{b['burg']}\nPop: {b['population']}\nFaction: {b['state']}")
+            except Exception:
+                pass
+                
+        # Draw player marker
+        player_x = payload.get("player_macro_x", 0.0)
+        player_y = payload.get("player_macro_y", 0.0)
+        
+        player_pen = QPen(Qt.GlobalColor.red)
+        player_brush = QBrush(Qt.GlobalColor.red)
+        p_marker = self.scene.addEllipse(player_x - 5, player_y - 5, 20, 20, player_pen, player_brush)
+        p_marker.setToolTip("You are here.")
+        
+        self.view.fitInView(self.scene.itemsBoundingRect(), Qt.AspectRatioMode.KeepAspectRatio)

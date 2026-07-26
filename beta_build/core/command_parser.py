@@ -49,6 +49,9 @@ class CommandParser:
             re.IGNORECASE
         )
         
+        self.equip_pattern = re.compile(r"\bequip\s+(.*)\b", re.IGNORECASE)
+        self.unequip_pattern = re.compile(r"\bunequip\s+(.*)\b", re.IGNORECASE)
+        
         self.save_pattern = re.compile(r"^/save$", re.IGNORECASE)
         self.load_pattern = re.compile(r"^/load$", re.IGNORECASE)
 
@@ -145,6 +148,34 @@ class CommandParser:
                 
             return self._resolve_interaction(target_str, curr_x, curr_y, player_uuid, player_character=player_character)
             
+        # 5. Check for Equipment
+        equip_match = self.equip_pattern.search(intent_lower)
+        if equip_match:
+            item_name = equip_match.group(1).strip()
+            if not player_character:
+                return {"type": "error", "system_prompt": "System Error: No player character loaded."}
+                
+            bag = player_character.inventory.bag
+            for i, item in enumerate(bag):
+                if item_name.lower() in item.name.lower():
+                    self.bus.publish("UI_INVENTORY_EQUIP", {"index": i})
+                    return {"type": "interaction_success", "system_prompt": f"System: Player successfully equipped {item.name}. Narrate."}
+            
+            return {"type": "error", "system_prompt": f"System Error: Item '{item_name}' not found in bag."}
+            
+        unequip_match = self.unequip_pattern.search(intent_lower)
+        if unequip_match:
+            item_name = unequip_match.group(1).strip()
+            if not player_character:
+                return {"type": "error", "system_prompt": "System Error: No player character loaded."}
+                
+            for slot_name, item in player_character.inventory.slots.items():
+                if item and item_name.lower() in item.name.lower():
+                    self.bus.publish("UI_INVENTORY_UNEQUIP", {"slot": slot_name})
+                    return {"type": "interaction_success", "system_prompt": f"System: Player successfully unequipped {item.name}. Narrate."}
+                    
+            return {"type": "error", "system_prompt": f"System Error: Item '{item_name}' not currently equipped."}
+            
         # Fallback to generic unhandled (let AI handle it)
         return {
             "type": "generic",
@@ -158,11 +189,12 @@ class CommandParser:
         
         if not is_passable:
             if reason == "edge_of_map":
+                self.bus.publish("EDGE_TRANSITION_REQUESTED", {"direction": direction})
                 return {
                     "type": "movement_failed",
                     "reason": reason,
                     "direction": direction,
-                    "system_prompt": f"System: Player attempted to move {direction} but reached the edge of the physical area. Narrate their realization.",
+                    "system_prompt": f"System: Player attempted to move {direction} and is traveling to the adjacent region. Narrate their departure.",
                     "dx": 0, "dy": 0
                 }
             else:

@@ -82,7 +82,29 @@ class CharacterHUD(QFrame):
         state_layout.addStretch()
         state_layout.addWidget(self.trauma_label)
         
+        # Action Economy (3 Beats)
+        self.beats_layout = QHBoxLayout()
+        self.beats_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        self.move_dot = QLabel("⬤")
+        self.move_dot.setStyleSheet("color: #44AAFF; font-size: 16px; margin-right: 5px;")
+        self.move_dot.setToolTip("Move Action")
+        
+        self.stam_dot = QLabel("⬤")
+        self.stam_dot.setStyleSheet("color: #b08d43; font-size: 16px; margin-right: 5px;")
+        self.stam_dot.setToolTip("Stamina Action")
+        
+        self.foc_dot = QLabel("⬤")
+        self.foc_dot.setStyleSheet("color: #aa44ff; font-size: 16px;")
+        self.foc_dot.setToolTip("Focus Action")
+        
+        self.beats_layout.addWidget(QLabel("Actions:"))
+        self.beats_layout.addWidget(self.move_dot)
+        self.beats_layout.addWidget(self.stam_dot)
+        self.beats_layout.addWidget(self.foc_dot)
+        
         layout.addLayout(state_layout)
+        layout.addLayout(self.beats_layout)
         layout.addStretch()
         
         self.setLayout(layout)
@@ -125,6 +147,13 @@ class CharacterHUD(QFrame):
         else:
             self.weapon_label.setText("Weapon: Unarmed")
 
+    def update_beats(self, beats: dict):
+        """
+        Updates the 3-beat visual trackers.
+        """
+        self.move_dot.setStyleSheet("color: #44AAFF; font-size: 16px;" if beats.get("move", False) else "color: #444; font-size: 16px;")
+        self.stam_dot.setStyleSheet("color: #b08d43; font-size: 16px;" if beats.get("stamina", False) else "color: #444; font-size: 16px;")
+        self.foc_dot.setStyleSheet("color: #aa44ff; font-size: 16px;" if beats.get("focus", False) else "color: #444; font-size: 16px;")
 
 class StoryTracker(QFrame):
     """
