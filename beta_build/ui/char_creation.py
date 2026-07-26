@@ -1,316 +1,381 @@
+import logging
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
     QPushButton, QComboBox, QFormLayout, QSpinBox, 
     QStackedWidget, QRadioButton, QButtonGroup, QCheckBox,
-    QMessageBox, QScrollArea, QGridLayout
+    QMessageBox, QScrollArea, QGridLayout, QFrame, QTextEdit
 )
 from PyQt6.QtCore import Qt
 from beta_build.core.chassis_data import KINGDOMS, SUB_TYPES, BASE_STATS, ORIGINS, SKILL_TRACKS
+from beta_build.core.models import CharacterSheet
+
+logger = logging.getLogger("CharForge")
 
 class CharacterCreationScreen(QWidget):
     def __init__(self, bus):
         super().__init__()
         self.bus = bus
-        self.setStyleSheet("background-color: #222; color: white;")
+        self.setStyleSheet("background-color: #1a1e24; color: #d8d8d8;")
         self.layout = QVBoxLayout()
         self.setLayout(self.layout)
         
-        title = QLabel("Initialize Biological Chassis")
-        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #44FF44;")
+        # Title
+        title = QLabel("CHARACTER FORGE")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setStyleSheet("font-size: 28px; font-weight: bold; color: #4CAF50; letter-spacing: 2px; margin: 10px;")
         self.layout.addWidget(title)
         
+        # Wizard Stack
         self.stack = QStackedWidget()
         self.layout.addWidget(self.stack)
         
-        self.step_label = QLabel("Step 1 of 5")
-        self.layout.addWidget(self.step_label)
+        # State variables
+        self.char_name = "Wanderer"
+        self.selected_kingdom = KINGDOMS[0]
+        self.selected_subtype = SUB_TYPES[0]
+        self.selected_origin = "Unknown"
+        self.size_shift = 0 # 0=Standard, -1=Down, 1=Up
+        self.shift_stat = ""
+        self.selected_paths = []
+        self.final_stats = {}
+
+        self._init_page_1()
+        self._init_page_2()
+        self._init_page_3()
+        self._init_page_4()
         
+        # Navigation
         nav_layout = QHBoxLayout()
-        self.btn_prev = QPushButton("Previous")
+        self.btn_prev = QPushButton("◄ Previous")
         self.btn_prev.clicked.connect(self.prev_step)
-        self.btn_next = QPushButton("Next")
+        
+        self.step_label = QLabel("Step 1 of 4")
+        self.step_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.step_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #888;")
+        
+        self.btn_next = QPushButton("Next ►")
         self.btn_next.clicked.connect(self.next_step)
+        
         nav_layout.addWidget(self.btn_prev)
+        nav_layout.addWidget(self.step_label)
         nav_layout.addWidget(self.btn_next)
         self.layout.addLayout(nav_layout)
         
-        self.current_stats = {}
-        
-        self._init_step1()
-        self._init_step2()
-        self._init_step3()
-        self._init_step4()
-        self._init_step5()
-        
         self.stack.setCurrentIndex(0)
         self.update_nav()
-        
-    def _init_step1(self):
+
+    # --- PAGE 1: GENUS SELECTION ---
+    def _init_page_1(self):
         page = QWidget()
-        layout = QFormLayout()
+        layout = QVBoxLayout()
         
-        self.name_input = QLineEdit()
-        self.kingdom_combo = QComboBox()
-        self.kingdom_combo.addItems(KINGDOMS)
+        # Name
+        name_layout = QHBoxLayout()
+        name_label = QLabel("Subject Designation:")
+        name_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        self.name_input = QLineEdit("Wanderer")
+        self.name_input.setStyleSheet("font-size: 18px; padding: 8px; background-color: #0f1115; border: 1px solid #4CAF50;")
+        name_layout.addWidget(name_label)
+        name_layout.addWidget(self.name_input)
+        layout.addLayout(name_layout)
+        
+        layout.addSpacing(20)
+        
+        # Kingdom Toggles
+        k_label = QLabel("Select Biological Kingdom:")
+        k_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #aaa;")
+        layout.addWidget(k_label)
+        
+        self.kingdom_group = QButtonGroup(page)
+        k_grid = QGridLayout()
+        for i, k in enumerate(KINGDOMS):
+            btn = QPushButton(k)
+            btn.setCheckable(True)
+            btn.setStyleSheet("""
+                QPushButton { background-color: #2b323b; padding: 15px; font-size: 16px; border: 2px solid #3a414c; border-radius: 6px; }
+                QPushButton:checked { background-color: #143314; border: 2px solid #4CAF50; color: #4CAF50; font-weight: bold; }
+            """)
+            if i == 0:
+                btn.setChecked(True)
+            self.kingdom_group.addButton(btn, i)
+            k_grid.addWidget(btn, i // 2, i % 2)
+            
+        layout.addLayout(k_grid)
+        layout.addSpacing(20)
+        
+        # Subtype Selection
+        s_label = QLabel("Select Mechanical Sub-Type:")
+        s_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #aaa;")
+        layout.addWidget(s_label)
         
         self.subtype_combo = QComboBox()
         self.subtype_combo.addItems(SUB_TYPES)
+        self.subtype_combo.setStyleSheet("font-size: 18px; padding: 8px; background-color: #0f1115; border: 1px solid #3a414c;")
+        layout.addWidget(self.subtype_combo)
         
-        self.kingdom_combo.currentTextChanged.connect(self._update_origins)
-        self.subtype_combo.currentTextChanged.connect(self._update_origins)
-        
-        layout.addRow("Chassis Designation:", self.name_input)
-        layout.addRow("Biological Kingdom:", self.kingdom_combo)
-        layout.addRow("Mechanical Sub-Type:", self.subtype_combo)
-        
+        layout.addStretch()
         page.setLayout(layout)
         self.stack.addWidget(page)
-        
-    def _init_step2(self):
+
+    # --- PAGE 2: BIOLOGICAL NICHE ---
+    def _init_page_2(self):
         page = QWidget()
-        layout = QFormLayout()
+        layout = QVBoxLayout()
+        
+        # Origin Select
+        o_label = QLabel("Select Specific Origin:")
+        o_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #aaa;")
+        layout.addWidget(o_label)
         
         self.origin_combo = QComboBox()
-        layout.addRow("Biological Origin:", self.origin_combo)
+        self.origin_combo.setStyleSheet("font-size: 18px; padding: 8px; background-color: #0f1115; border: 1px solid #3a414c;")
+        layout.addWidget(self.origin_combo)
         
-        self.size_group = QButtonGroup()
-        self.size_standard = QRadioButton("Standard (No Stat Shift)")
-        self.size_standard.setChecked(True)
-        self.size_down = QRadioButton("Shift Down (+1 Finesse or +1 Reflex)")
-        self.size_up = QRadioButton("Shift Up (+1 Might or +1 Endurance)")
+        layout.addSpacing(30)
         
-        self.size_group.addButton(self.size_standard)
-        self.size_group.addButton(self.size_down)
-        self.size_group.addButton(self.size_up)
+        # Size Shift
+        size_label = QLabel("Genetic Variation (Size Shift):")
+        size_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #aaa;")
+        layout.addWidget(size_label)
         
-        layout.addRow(QLabel("Genetic Variation (Size Shift):"))
-        layout.addRow(self.size_standard)
-        layout.addRow(self.size_down)
-        layout.addRow(self.size_up)
+        self.size_group = QButtonGroup(page)
         
+        self.btn_size_std = QRadioButton("Standard (No Stat Shift)")
+        self.btn_size_std.setChecked(True)
+        self.btn_size_down = QRadioButton("Shift Down (Small) - Requires +1 to Finesse or Reflex")
+        self.btn_size_up = QRadioButton("Shift Up (Large) - Requires +1 to Might or Endurance")
+        
+        for btn, idx in [(self.btn_size_std, 0), (self.btn_size_down, -1), (self.btn_size_up, 1)]:
+            btn.setStyleSheet("font-size: 16px; padding: 5px;")
+            self.size_group.addButton(btn, idx)
+            layout.addWidget(btn)
+            
+        layout.addSpacing(20)
+        
+        # Shift Stat Choice
         self.shift_choice = QComboBox()
-        self.shift_choice.addItems(["Might", "Endurance"]) # Will update based on radio
+        self.shift_choice.setStyleSheet("font-size: 16px; padding: 6px; background-color: #0f1115;")
         self.shift_choice.setEnabled(False)
-        layout.addRow("Shift Bonus to:", self.shift_choice)
+        layout.addWidget(QLabel("Select Shift Bonus Target:"))
+        layout.addWidget(self.shift_choice)
         
-        self.size_down.toggled.connect(self._update_shift_combo)
-        self.size_up.toggled.connect(self._update_shift_combo)
-        self.size_standard.toggled.connect(self._update_shift_combo)
+        self.size_group.idToggled.connect(self._on_size_toggled)
         
+        layout.addStretch()
         page.setLayout(layout)
         self.stack.addWidget(page)
-        self._update_origins() # Populate initially
         
-    def _update_shift_combo(self):
-        if self.size_standard.isChecked():
-            self.shift_choice.clear()
+    def _on_size_toggled(self, id, checked):
+        if not checked: return
+        self.shift_choice.clear()
+        if id == 0:
             self.shift_choice.setEnabled(False)
-        elif self.size_down.isChecked():
-            self.shift_choice.clear()
-            self.shift_choice.addItems(["finesse", "reflex"])
+        elif id == -1:
+            self.shift_choice.addItems(["finesse", "reflexes"])
             self.shift_choice.setEnabled(True)
-        elif self.size_up.isChecked():
-            self.shift_choice.clear()
+        elif id == 1:
             self.shift_choice.addItems(["might", "endurance"])
             self.shift_choice.setEnabled(True)
-            
-    def _update_origins(self):
-        kingdom = self.kingdom_combo.currentText()
-        subtype = self.subtype_combo.currentText()
+
+    def refresh_page_2(self):
+        self.selected_kingdom = self.kingdom_group.checkedButton().text()
+        self.selected_subtype = self.subtype_combo.currentText()
+        
+        origins = ORIGINS.get(self.selected_kingdom, {}).get(self.selected_subtype, ["Standard"])
         self.origin_combo.clear()
-        origins = ORIGINS.get(kingdom, {}).get(subtype, [])
         self.origin_combo.addItems(origins)
-        
-    def _init_step3(self):
+
+    # --- PAGE 3: THE PATH ---
+    def _init_page_3(self):
         page = QWidget()
         layout = QVBoxLayout()
         
-        info = QLabel("Life Experience Phase: Allocate exactly +3 Body points and +3 Mind points.\nBiological Ceiling is 8.")
-        layout.addWidget(info)
+        p_label = QLabel("Define Your Paths (Select 4 Tracks):")
+        p_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #4CAF50;")
+        layout.addWidget(p_label)
         
-        grid = QGridLayout()
-        self.stat_spinboxes = {}
+        # Filter tracks
+        offense_tracks = [k for k, v in SKILL_TRACKS.items() if v["category"] == "Offense"]
+        defense_tracks = [k for k, v in SKILL_TRACKS.items() if v["category"] == "Defense"]
+        utility_magic_tracks = [k for k, v in SKILL_TRACKS.items() if v["category"] in ["Magic", "Utility"]]
         
-        self.body_stats = ["Might", "Endurance", "Finesse", "Reflex", "Vitality", "Fortitude"]
-        self.mind_stats = ["Knowledge", "Logic", "Awareness", "Intuition", "Charm", "Willpower"]
+        def format_track(k):
+            t = SKILL_TRACKS[k]
+            return f"{t['name']} (+1 {t['stat_bonus'].capitalize()}, -1 {t['stat_penalty'].capitalize()})"
+
+        self.path_offense = QComboBox()
+        self.path_offense.addItems([format_track(k) for k in offense_tracks])
+        self.path_offense.setProperty("keys", offense_tracks)
         
-        row = 0
-        grid.addWidget(QLabel("Body Stats (+3)"), row, 0)
-        grid.addWidget(QLabel("Mind Stats (+3)"), row, 2)
-        row += 1
+        self.path_defense = QComboBox()
+        self.path_defense.addItems([format_track(k) for k in defense_tracks])
+        self.path_defense.setProperty("keys", defense_tracks)
         
-        for i in range(6):
-            b_stat = self.body_stats[i]
-            b_sb = QSpinBox()
-            b_sb.setRange(0, 3)
-            self.stat_spinboxes[b_stat.lower()] = b_sb
-            grid.addWidget(QLabel(b_stat), row, 0)
-            grid.addWidget(b_sb, row, 1)
+        self.path_magic1 = QComboBox()
+        self.path_magic1.addItems([format_track(k) for k in utility_magic_tracks])
+        self.path_magic1.setProperty("keys", utility_magic_tracks)
+        
+        self.path_magic2 = QComboBox()
+        self.path_magic2.addItems([format_track(k) for k in utility_magic_tracks])
+        self.path_magic2.setProperty("keys", utility_magic_tracks)
+        # Select a different default for the second slot
+        if self.path_magic2.count() > 1:
+            self.path_magic2.setCurrentIndex(1)
+        
+        form = QFormLayout()
+        for label, widget in [
+            ("Primary Offense:", self.path_offense),
+            ("Primary Defense:", self.path_defense),
+            ("Path A (Magic/Utility):", self.path_magic1),
+            ("Path B (Magic/Utility):", self.path_magic2)
+        ]:
+            widget.setStyleSheet("font-size: 14px; padding: 6px; background-color: #0f1115; border: 1px solid #3a414c;")
+            lbl = QLabel(label)
+            lbl.setStyleSheet("font-size: 16px; font-weight: bold; color: #aaa;")
+            form.addRow(lbl, widget)
             
-            m_stat = self.mind_stats[i]
-            m_sb = QSpinBox()
-            m_sb.setRange(0, 3)
-            self.stat_spinboxes[m_stat.lower()] = m_sb
-            grid.addWidget(QLabel(m_stat), row, 2)
-            grid.addWidget(m_sb, row, 3)
-            
-            row += 1
-            
-        layout.addLayout(grid)
+        layout.addLayout(form)
+        layout.addStretch()
         page.setLayout(layout)
         self.stack.addWidget(page)
-        
-    def _init_step4(self):
+
+    def refresh_page_3(self):
+        # Nothing strictly needs refreshing here based on page 2
+        pass
+
+    # --- PAGE 4: MANIFEST ---
+    def _init_page_4(self):
         page = QWidget()
         layout = QVBoxLayout()
         
-        info = QLabel("Professional Training: Select exactly 6 Skill Tracks.\nEach grants +2 to its governing attribute.")
-        layout.addWidget(info)
+        title = QLabel("BIOLOGICAL & PATH MANIFEST")
+        title.setStyleSheet("font-size: 20px; font-weight: bold; color: #4CAF50;")
+        layout.addWidget(title)
         
-        scroll = QScrollArea()
-        scroll_w = QWidget()
-        grid = QGridLayout()
+        self.manifest_text = QTextEdit()
+        self.manifest_text.setReadOnly(True)
+        self.manifest_text.setStyleSheet("font-size: 16px; font-family: monospace; background-color: #0a0c0f; border: 1px solid #3a414c; padding: 10px;")
+        layout.addWidget(self.manifest_text)
         
-        self.track_checkboxes = []
-        row, col = 0, 0
-        for track, stat in SKILL_TRACKS.items():
-            cb = QCheckBox(f"{track} (+2 {stat.title()})")
-            self.track_checkboxes.append((track, cb, stat))
-            grid.addWidget(cb, row, col)
-            col += 1
-            if col > 1:
-                col = 0
-                row += 1
-                
-        scroll_w.setLayout(grid)
-        scroll.setWidget(scroll_w)
-        scroll.setWidgetResizable(True)
-        layout.addWidget(scroll)
+        self.btn_finalize = QPushButton("FINALIZE & ENTER WORLD")
+        self.btn_finalize.setStyleSheet("""
+            QPushButton { background-color: #4CAF50; color: #0a0c0f; font-size: 20px; font-weight: bold; padding: 15px; border-radius: 8px; }
+            QPushButton:hover { background-color: #45a049; }
+        """)
+        self.btn_finalize.clicked.connect(self._finalize_character)
+        layout.addWidget(self.btn_finalize)
         
         page.setLayout(layout)
         self.stack.addWidget(page)
+
+    def refresh_page_4(self):
+        """Calculate final stats and display manifest."""
+        self.char_name = self.name_input.text() or "Wanderer"
+        self.selected_origin = self.origin_combo.currentText()
+        size_id = self.size_group.checkedId()
+        shift_target = self.shift_choice.currentText() if size_id != 0 else None
         
-    def _init_step5(self):
-        page = QWidget()
-        layout = QVBoxLayout()
+        # Fetch chosen paths
+        keys_o = self.path_offense.property("keys")
+        keys_d = self.path_defense.property("keys")
+        keys_m = self.path_magic1.property("keys")
         
-        self.summary_label = QLabel("Summary will appear here.")
-        layout.addWidget(self.summary_label)
+        self.selected_paths = [
+            keys_o[self.path_offense.currentIndex()],
+            keys_d[self.path_defense.currentIndex()],
+            keys_m[self.path_magic1.currentIndex()],
+            keys_m[self.path_magic2.currentIndex()]
+        ]
         
-        btn_finalize = QPushButton("Finalize Party & Enter Drift")
-        btn_finalize.setStyleSheet("padding: 10px; background-color: #550000; color: white; font-weight: bold;")
-        btn_finalize.clicked.connect(self._on_finalize)
-        layout.addWidget(btn_finalize)
+        # Load Base Stats
+        base = BASE_STATS.get(self.selected_kingdom, {}).get(self.selected_subtype, {})
+        self.final_stats = {
+            "might": base.get("might", 5),
+            "endurance": base.get("endurance", 5),
+            "finesse": base.get("finesse", 5),
+            "reflexes": base.get("reflex", 5),
+            "vitality": base.get("vitality", 5),
+            "fortitude": base.get("fortitude", 5),
+            "knowledge": base.get("knowledge", 5),
+            "logic": base.get("logic", 5),
+            "awareness": base.get("awareness", 5),
+            "intuition": base.get("intuition", 5),
+            "charm": base.get("charm", 5),
+            "willpower": base.get("willpower", 5),
+        }
         
-        page.setLayout(layout)
-        self.stack.addWidget(page)
+        # Apply Size Shift
+        if size_id != 0 and shift_target:
+            self.final_stats[shift_target] += 1
+            
+        # Apply Path +/- Modifiers
+        for path_key in self.selected_paths:
+            track = SKILL_TRACKS[path_key]
+            bonus = track["stat_bonus"]
+            penalty = track["stat_penalty"]
+            self.final_stats[bonus] = min(10, self.final_stats.get(bonus, 5) + 1)
+            self.final_stats[penalty] = max(1, self.final_stats.get(penalty, 5) - 1)
+            
+        manifest = f"SUBJECT: {self.char_name}\n"
+        manifest += f"KINGDOM: {self.selected_kingdom}\n"
+        manifest += f"SUB-TYPE: {self.selected_subtype}\n"
+        manifest += f"ORIGIN: {self.selected_origin}\n"
+        manifest += "-"*30 + "\n"
         
+        manifest += "CORE STATS (Post-Modifiers):\n"
+        for stat, val in self.final_stats.items():
+            manifest += f"  {stat.capitalize().ljust(12)}: {val}\n"
+            
+        manifest += "-"*30 + "\n"
+        manifest += "SELECTED PATHS:\n"
+        for path_key in self.selected_paths:
+            track = SKILL_TRACKS[path_key]
+            manifest += f"  - {track['name']} ({track['category']})\n"
+            
+        manifest += "\nBIOLOGICAL PASSIVES:\n"
+        manifest += "  - Base Sub-Type Trait unlocked.\n"
+        if size_id == 1: manifest += "  - Large Size Trait unlocked.\n"
+        if size_id == -1: manifest += "  - Small Size Trait unlocked.\n"
+        
+        self.manifest_text.setText(manifest)
+
+    def _finalize_character(self):
+        """Instantiate Pydantic Model and Broadcast."""
+        sheet = CharacterSheet(
+            name=self.char_name,
+            biological_origin=f"{self.selected_origin} ({self.selected_subtype})",
+            stats=self.final_stats,
+            skills=[SKILL_TRACKS[pk]["name"] for pk in self.selected_paths]
+        )
+        logger.info(f"Finalized Character: {self.char_name}")
+        self.bus.publish("PLAYER_CREATED", sheet.model_dump())
+
+    # --- NAVIGATION ---
     def prev_step(self):
         idx = self.stack.currentIndex()
         if idx > 0:
             self.stack.setCurrentIndex(idx - 1)
         self.update_nav()
-        
+
     def next_step(self):
         idx = self.stack.currentIndex()
-        
-        # Validation
         if idx == 0:
-            if not self.name_input.text().strip():
-                QMessageBox.warning(self, "Error", "Chassis Designation required.")
-                return
-        if idx == 2:
-            body_pts = sum(self.stat_spinboxes[s.lower()].value() for s in self.body_stats)
-            mind_pts = sum(self.stat_spinboxes[s.lower()].value() for s in self.mind_stats)
-            if body_pts != 3 or mind_pts != 3:
-                QMessageBox.warning(self, "Error", f"Must allocate exactly 3 Body (current: {body_pts}) and 3 Mind (current: {mind_pts}).")
-                return
-        if idx == 3:
-            selected = sum(1 for _, cb, _ in self.track_checkboxes if cb.isChecked())
-            if selected != 6:
-                QMessageBox.warning(self, "Error", f"Must select exactly 6 Skill Tracks. Currently selected: {selected}")
-                return
-            self._generate_summary()
-            
-        if idx < self.stack.count() - 1:
-            self.stack.setCurrentIndex(idx + 1)
+            self.refresh_page_2()
+            self.stack.setCurrentIndex(1)
+        elif idx == 1:
+            self.refresh_page_3()
+            self.stack.setCurrentIndex(2)
+        elif idx == 2:
+            self.refresh_page_4()
+            self.stack.setCurrentIndex(3)
         self.update_nav()
-        
+
     def update_nav(self):
         idx = self.stack.currentIndex()
         self.step_label.setText(f"Step {idx + 1} of {self.stack.count()}")
         self.btn_prev.setEnabled(idx > 0)
-        self.btn_next.setEnabled(idx < self.stack.count() - 1)
         
-    def _generate_summary(self):
-        kingdom = self.kingdom_combo.currentText()
-        subtype = self.subtype_combo.currentText()
-        origin = self.origin_combo.currentText()
-        
-        # 1. Base Stats
-        base = BASE_STATS[kingdom][subtype].copy()
-        
-        # 2. Size Shift
-        if not self.size_standard.isChecked():
-            shift_stat = self.shift_choice.currentText().lower()
-            base[shift_stat] += 1
-            
-        # 3. Life Experience
-        for stat, sb in self.stat_spinboxes.items():
-            base[stat] += sb.value()
-            
-        # 4. Professional Training
-        for track, cb, stat in self.track_checkboxes:
-            if cb.isChecked():
-                base[stat] += 2
-                
-        # 5. Biological Ceiling & Overflow
-        body = ["might", "endurance", "finesse", "reflex", "vitality", "fortitude"]
-        mind = ["knowledge", "logic", "awareness", "intuition", "charm", "willpower"]
-        
-        for category in [body, mind]:
-            overflow = 0
-            for stat in category:
-                if base[stat] > 8:
-                    overflow += (base[stat] - 8)
-                    base[stat] = 8
-            while overflow > 0:
-                for stat in category:
-                    if overflow > 0 and base[stat] < 8:
-                        base[stat] += 1
-                        overflow -= 1
-                    if overflow == 0: break
-                if all(base[s] == 8 for s in category):
-                    break
-                    
-        self.final_stats = base
-        
-        hp = base['endurance'] + base['fortitude'] + base['vitality']
-        composure = base['willpower'] + base['logic'] + base['charm']
-        stam_cap = base['might'] + base['reflex'] + base['finesse']
-        foc_cap = base['knowledge'] + base['awareness'] + base['intuition']
-        
-        summary = (
-            f"Name: {self.name_input.text()}\n"
-            f"Origin: {kingdom} - {subtype} ({origin})\n\n"
-            f"Derived Stats:\n"
-            f"HP: {hp} | Composure: {composure}\n"
-            f"Stamina: {stam_cap} | Focus: {foc_cap}\n\n"
-            f"Core Attributes:\n"
-        )
-        for k, v in base.items():
-            summary += f"{k.title()}: {v} | "
-        
-        self.summary_label.setText(summary)
-        
-    def _on_finalize(self):
-        name = self.name_input.text().strip()
-        kingdom = self.kingdom_combo.currentText()
-        origin = self.origin_combo.currentText()
-        
-        payload = {
-            "name": name,
-            "origin": f"{kingdom}-{origin}",
-            "stats": self.final_stats
-        }
-        self.bus.publish("UI_FINALIZE_PARTY", payload)
+        if idx == self.stack.count() - 1:
+            self.btn_next.hide()
+        else:
+            self.btn_next.show()

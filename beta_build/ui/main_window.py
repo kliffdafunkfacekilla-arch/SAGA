@@ -11,6 +11,8 @@ from beta_build.audio.audio_manager import TTSWorker, STTWorker
 from beta_build.core.models import CharacterSheet
 from beta_build.ai_services.director import AIDirector
 from beta_build.data.memory_store import MemoryStore
+from beta_build.core.world_gen_worker import WorldGenWorker
+from beta_build.core.journey_manager import JourneyManager
 
 # --- Frontend Components ---
 from beta_build.ui.char_creation import CharacterCreationScreen
@@ -78,6 +80,7 @@ class SagaDesktopApp(QMainWindow):
         self.bus.subscribe("UI_START_NEW_GAME", lambda p: self.stack.setCurrentIndex(1))
         self.bus.subscribe("UI_LOAD_GAME", self._show_game)
         self.bus.subscribe("UI_FINALIZE_PARTY", self._show_game)
+        self.bus.subscribe("PLAYER_CREATED", self._on_player_created)
         
         self.bus.subscribe("UI_OPEN_CHAR_MANAGEMENT", lambda p: self.stack.setCurrentIndex(3))
         self.bus.subscribe("UI_CLOSE_CHAR_MANAGEMENT", lambda p: self.stack.setCurrentIndex(2))
@@ -88,6 +91,9 @@ class SagaDesktopApp(QMainWindow):
         # Intent Execution Sub
         self.bus.subscribe("EXECUTE_INTENT", self._handle_intent)
         self.bus.subscribe("UI_TOGGLE_MIC", self._handle_mic_toggle)
+        
+        self.bus.subscribe("GENERATE_SAFE_MAP", lambda p: self.world_gen_worker.request_generation(p.get("location"), False))
+        self.bus.subscribe("GENERATE_AMBUSH_MAP", lambda p: self.world_gen_worker.request_generation(p.get("location"), True))
 
         # Background Workers Initialization
         self.init_workers()
@@ -97,6 +103,7 @@ class SagaDesktopApp(QMainWindow):
         self.player_character = CharacterSheet(name="Wanderer")
         self.ai_director = AIDirector(load_model=False)
         self.memory = MemoryStore()
+        self.journey_manager = JourneyManager(self.bus)
 
     def init_workers(self):
         """Initializes and connects QThreads for background AI and audio tasks."""
@@ -117,15 +124,36 @@ class SagaDesktopApp(QMainWindow):
         self.stt_worker = STTWorker(parent=self)
         self.stt_worker.speech_recognized.connect(self.map_canvas.on_speech_recognized)
         self.stt_worker.error_occurred.connect(self.map_canvas.on_error)
+
+        # 4. World Gen Worker
+        self.world_gen_worker = WorldGenWorker(parent=self)
+        self.world_gen_worker.map_ready.connect(lambda payload: self.bus.publish("MAP_PAYLOAD_READY", payload))
+        self.world_gen_worker.error_occurred.connect(self.map_canvas.on_error)
+        self.world_gen_worker.start()
         
     def _show_game(self, payload=None):
         self.stack.setCurrentIndex(2)
         # Hook up the Pydantic character state to the UI HUD
         self.bus.publish("HUD_UPDATE", {"character": self.player_character.model_dump()})
 
+    def _on_player_created(self, payload):
+        """Handoff from Character Creation to the active Game Screen."""
+        self.player_character = CharacterSheet(**payload)
+        self.bus.publish("HUD_UPDATE", {"character": self.player_character.model_dump()})
+        self.stack.setCurrentIndex(2)
+
     def _handle_intent(self, payload):
-        intent = payload.get("intent", "")
+        intent = payload.get("intent", "").strip()
         
+        import re
+        
+        match = re.search(r"(?:travel to|head to|go to)\s+([a-zA-Z\s]+)", intent, re.IGNORECASE)
+        if match:
+            location = match.group(1).strip()
+            self.map_canvas.log_view.append(f"\n<i>Traveling to {location}...</i>\n")
+            self.bus.publish("TRAVEL_REQUESTED", {"location": location, "stats": self.player_character.stats})
+            return
+            
         self.map_canvas.log_view.append("\n<i>Narrator is thinking...</i>\n")
         self.map_canvas.log_view.append("<font color='#a0a0ff'>[NARRATOR]:</font> ")
         
@@ -165,4 +193,5 @@ class SagaDesktopApp(QMainWindow):
         self.llm_worker.requestInterruption()
         self.tts_worker.requestInterruption()
         self.stt_worker.requestInterruption()
+        self.world_gen_worker.requestInterruption()
         super().closeEvent(event)

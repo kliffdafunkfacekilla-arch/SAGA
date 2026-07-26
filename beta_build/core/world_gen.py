@@ -26,7 +26,7 @@ class WorldGenerator:
         except Exception as e:
             logger.error(f"Failed to load burgs CSV: {e}")
 
-    def generate_local_map(self, location_name: str, width: int = 40, height: int = 40) -> Dict[str, Any]:
+    def generate_local_map(self, location_name: str, width: int = 40, height: int = 40, is_ambush: bool = False) -> Dict[str, Any]:
         """
         Generates a 2D grid matrix for the given location name.
         """
@@ -35,7 +35,9 @@ class WorldGenerator:
 
         # Decide biome/style based on data
         biome = "grass"
-        if burg_data:
+        if is_ambush:
+            biome = "wilderness_ambush"
+        elif burg_data:
             biome = "town"
             # We could read elevation, temperature, etc. here for more precision
 
@@ -59,7 +61,17 @@ class WorldGenerator:
 
         # In a real scenario, we'd place actual entities from the lore
         entities = []
-        if biome == "town":
+        if is_ambush:
+            for _ in range(random.randint(2, 4)):
+                entities.append({
+                    "uuid": f"enemy_{random.randint(1000, 9999)}",
+                    "x": random.randint(5, width - 5),
+                    "y": random.randint(5, height - 5),
+                    "sprite": "hostile",
+                    "name": "Bandit",
+                    "personality": "hostile"
+                })
+        elif biome == "town":
             entities.append({
                 "uuid": f"npc_{random.randint(1000, 9999)}",
                 "x": width // 2 + 2,
@@ -69,8 +81,10 @@ class WorldGenerator:
                 "personality": "vendor"
             })
 
+        map_name = f"Wilderness Ambush near {location_name}" if is_ambush else (location_name if burg_data else f"Wilderness near {location_name}")
+
         return {
-            "name": location_name if burg_data else f"Wilderness near {location_name}",
+            "name": map_name,
             "biome": biome,
             "width": width,
             "height": height,

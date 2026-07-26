@@ -3,7 +3,7 @@ Provides the MapCanvas and BattleMapCanvas components for the left-hand panel of
 """
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QTextEdit, QLineEdit, QGraphicsView, 
-                             QGraphicsScene, QMenu, QGraphicsEllipseItem, QGraphicsItem, QGraphicsTextItem)
+                             QGraphicsScene, QMenu, QGraphicsEllipseItem, QGraphicsItem, QGraphicsTextItem, QGraphicsRectItem)
 from PyQt6.QtCore import Qt, pyqtSlot, QRectF
 from PyQt6.QtGui import QBrush, QColor, QPen, QPainter
 
@@ -98,6 +98,39 @@ class BattleMapCanvas(QGraphicsView):
         if uuid in self.entities:
             token = self.entities.pop(uuid)
             self.scene.removeItem(token)
+
+    def load_generated_payload(self, payload: dict):
+        """Loads a generated grid and entities from the WorldGenWorker."""
+        self.scene.clear()
+        self.entities.clear()
+        
+        grid = payload.get("grid", [])
+        for y, row in enumerate(grid):
+            for x, val in enumerate(row):
+                if val == 1: # Obstacle
+                    rect = QGraphicsRectItem(x * self.tile_size, y * self.tile_size, self.tile_size, self.tile_size)
+                    rect.setBrush(QBrush(QColor("#444444")))
+                    rect.setPen(QPen(Qt.PenStyle.NoPen))
+                    self.scene.addItem(rect)
+                elif val == 2: # Water
+                    rect = QGraphicsRectItem(x * self.tile_size, y * self.tile_size, self.tile_size, self.tile_size)
+                    rect.setBrush(QBrush(QColor("#113355")))
+                    rect.setPen(QPen(Qt.PenStyle.NoPen))
+                    self.scene.addItem(rect)
+                    
+        # Add player at center
+        width = payload.get("width", 40)
+        height = payload.get("height", 40)
+        self.spawn_entity("player_1", width // 2, height // 2, "gold", "Wanderer")
+        
+        for ent in payload.get("entities", []):
+            self.spawn_entity(
+                uuid=ent.get("uuid"),
+                x=ent.get("x", 0),
+                y=ent.get("y", 0),
+                color="red",
+                name=ent.get("name", "Unknown")
+            )
 
     def mousePressEvent(self, event):
         """Handle right/left clicks to open contextual interaction menus."""
@@ -231,6 +264,7 @@ class MapCanvas(QWidget):
         self.bus.subscribe("SPAWN_ENTITY", self._on_spawn_entity)
         self.bus.subscribe("MOVE_ENTITY", self._on_move_entity)
         self.bus.subscribe("REMOVE_ENTITY", self._on_remove_entity)
+        self.bus.subscribe("MAP_PAYLOAD_READY", self._on_map_payload_ready)
 
     def _on_spawn_entity(self, payload):
         self.battle_map.spawn_entity(
@@ -250,6 +284,11 @@ class MapCanvas(QWidget):
 
     def _on_remove_entity(self, payload):
         self.battle_map.remove_entity(payload.get("uuid"))
+
+    def _on_map_payload_ready(self, payload):
+        name = payload.get("name", "Unknown")
+        self.title.setText(f"S.A.G.A. Engine VTT (Beta Async) - {name}")
+        self.battle_map.load_generated_payload(payload)
 
     def _on_map_render(self, payload):
         # Kept for backward compatibility if we still want to read legacy grids,
