@@ -21,6 +21,11 @@ from beta_build.core.campaign_manager import CampaignManager
 # --- Frontend Components ---
 from beta_build.ui.char_creation import CharacterCreationScreen
 from beta_build.ui.character_management import CharacterManagementScreen
+
+from beta_build.core.turn_manager import TurnManager
+from beta_build.core.zone_manager import ZoneManager
+from beta_build.core.command_parser import CommandParser
+from beta_build.core.enemy_ai import EnemyAIEngine
 from beta_build.ui.map_view import MapCanvas
 from beta_build.ui.screens import StartMenu, VendorScreen
 
@@ -117,7 +122,14 @@ class SagaDesktopApp(QMainWindow):
         self.init_workers()
         
         # Core State
-        self.player_character = CharacterSheet(name="Wanderer")
+        self.player_character = None
+        self._pending_boot_location = None
+        
+        # Instantiate Backend State and Parser
+        self.zone_manager = ZoneManager(self.bus)
+        self.turn_manager = TurnManager(self.bus)
+        self.enemy_ai = EnemyAIEngine(self.bus, self.zone_manager, self.turn_manager)
+        self.command_parser = CommandParser(self.bus, self.zone_manager, self.turn_manager)
         self.ai_director = AIDirector(load_model=False)
         self.memory = MemoryStore()
         self.journey_manager = JourneyManager(self.bus)
@@ -165,26 +177,35 @@ class SagaDesktopApp(QMainWindow):
         # 1. Generate the base map IMMEDIATELY so the user isn't staring at a blank screen
         location = "Aloa"
         self._pending_boot_location = location
-        self.world_gen_worker.request_generation(location, False)
-        
-        # 2. Start AI-first background generation for narrative and entities
-        self.bus.publish("INITIATE_BOOT_SEQUENCE", {"location": location})
+        self.bus.publish("GENERATE_SAFE_MAP", {"location": location})
 
     def _on_map_payload_ready(self, payload):
         """Called when WorldGen finishes. If entities are present, it's combat."""
-        self.map_canvas._on_map_payload_ready(payload)
         
         # Spawn the player in the center
         width = payload.get("width", 40)
         height = payload.get("height", 40)
+        
         self.bus.publish("SPAWN_ENTITY", {
             "uuid": "player_1",
             "x": width // 2,
             "y": height // 2,
             "color": "gold",
-            "name": self.player_character.name,
+            "name": self.player_character.name if self.player_character else "Wanderer",
             "tags": ["player"]
         })
+        
+        # Start combat / turn economy
+        combatants = []
+        if self.player_character:
+            stats = self.player_character.stats
+            combatants.append({"uuid": "player_1", "stats": stats})
+        else:
+            combatants.append({"uuid": "player_1", "stats": {"awareness": 5, "reflexes": 5, "logic": 5}})
+            
+        combatants.append({"uuid": "enemy_stub", "stats": {"awareness": 3, "reflexes": 3, "logic": 3}})
+        
+        self.turn_manager.start_combat(combatants)
         
         # Now that the map is ready, we wait for the SCENE_STABILIZED signal 
         # (which triggers when the player token drops) to kick off the narrative.
@@ -216,9 +237,6 @@ class SagaDesktopApp(QMainWindow):
         """Handoff from Character Creation to the active Game Screen."""
         self.player_character = CharacterSheet(**payload)
         self._show_game()
-        
-        # Now trigger the map generation
-        self.bus.publish("GENERATE_SAFE_MAP", {"location": self._pending_boot_location})
 
     def _on_combat_resolved(self, payload):
         target = payload.get("target")
@@ -238,7 +256,35 @@ class SagaDesktopApp(QMainWindow):
         # We don't want to show raw backend prompts in the UI
         if not intent.startswith("COMBAT RESOLUTION:") and not intent.startswith("The player attempted to travel"):
             self.map_canvas.log_view.append(f"<b>You:</b> {intent}")
+            
+        # Route through strict CommandParser
+        action_result = self.command_parser.parse_intent(intent)
         
+        if action_result.get("type") == "movement_success":
+            # Deduct stamina (example basic math hook)
+            if self.player_character:
+                self.player_character.stamina = max(0, self.player_character.stamina - 1)
+                self.bus.publish("HUD_UPDATE", {"character": self.player_character.model_dump()})
+            
+            # Command AI to narrate the result
+            self.bus.publish("EXECUTE_AI_INTENT", {
+                "intent": action_result["system_prompt"],
+                "system_prompt": True
+            })
+            return
+            
+        elif action_result.get("type") in ("movement_failed", "combat_failed", "combat_success", "interaction_failed", "interaction_success", "turn_ended"):
+            self.bus.publish("EXECUTE_AI_INTENT", {
+                "intent": action_result["system_prompt"],
+                "system_prompt": True
+            })
+            return
+            
+        elif action_result.get("type") == "error":
+            self.map_canvas.log_view.append(f"<font color='red'>{action_result['system_prompt']}</font>")
+            return
+            
+        # If generic, fallback to older basic routing
         import re
         
         match_travel = re.search(r"(?:travel to|head to|go to)\s+([a-zA-Z\s]+)", intent, re.IGNORECASE)
@@ -341,10 +387,16 @@ class SagaDesktopApp(QMainWindow):
             if tag == "boot_sequence":
                 self._pending_boot_location = payload.get("location", "Aloa")
         else:
+            # Inject memory for combat/system intents too!
+            past_memories = self.memory.recall_context(intent)
+            current_context = "Current phase: " + intent
+            if past_memories:
+                current_context += f"\n{past_memories}"
+                
             # Wrap the system/NPC intent in the director's prompt format
             prompt = self.ai_director.generate_llm_prompt(
                 mechanical_result="The engine has triggered a system override or combat event.",
-                context="Current phase: " + intent,
+                context=current_context,
                 intent_raw="[SYSTEM COMMAND]: " + intent
             )
         

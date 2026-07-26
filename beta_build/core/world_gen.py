@@ -65,6 +65,11 @@ class WorldGenerator:
                             x=x, y=y, tile_type="water", 
                             tags=["water", "difficult_terrain", "conductive"]
                         ).model_dump())
+                    elif r < 0.08:
+                        row.append(TerrainTile(
+                            x=x, y=y, tile_type="chest", 
+                            tags=["interactable", "loot", "closed"]
+                        ).model_dump())
                     else:
                         row.append(TerrainTile(
                             x=x, y=y, tile_type="floor", 

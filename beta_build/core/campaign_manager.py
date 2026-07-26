@@ -37,7 +37,10 @@ class CampaignManager:
                     
             logger.info(f"Loaded campaign: {self.campaign_data.get('campaign_name')}")
             
-            # We DO NOT transition to node yet. Boot sequence must finish first.
+            # Start the first node
+            first_act = self.campaign_data.get("acts", [])[0]
+            first_node = first_act.get("nodes", [])[0]["node_id"]
+            self._transition_to_node(first_node)
             
         except Exception as e:
             logger.error(f"Failed to load campaign {filepath}: {e}")
@@ -89,6 +92,14 @@ class CampaignManager:
             f"Describe the environment, the weather, and what they see. Do not write their actions."
         )
         self.bus.publish("EXECUTE_AI_INTENT", {"intent": intent_prompt})
+        
+        # Broadcast HUD update
+        self.bus.publish("HUD_UPDATE", {
+            "dm_data": {
+                "current_quest": f"{title}\n{desc}",
+                "active_seeds": []
+            }
+        })
         
     def _on_resolve_dynamic_slot(self, payload: Dict[str, Any]):
         # Called when a player resolves a procedural local event
