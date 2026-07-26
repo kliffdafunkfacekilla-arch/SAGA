@@ -7,8 +7,8 @@
       "nodes": [
         {
           "node_id": "intro_01",
-          "title": "The Scavenger's Camp",
-          "description": "The player awakens in a ransacked camp. They must find their gear and survive the first night.",
+          "title": "Ambush at the Smuggler's Crossing",
+          "description": "You were hired to deliver a sealed iron lockbox to the Northern Bastion. But your caravan was just hit by raiders. You are bleeding, the caravan is burning, and the scavengers are closing in on the wreckage. You must protect the lockbox and survive.",
           "is_major_plot_point": true,
           "dynamic_slots": 0,
           "next_nodes": ["journey_to_settlement"]

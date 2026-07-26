@@ -138,9 +138,13 @@ class SagaDesktopApp(QMainWindow):
 
         # 4. World Gen Worker
         self.world_gen_worker = WorldGenWorker(parent=self)
-        self.world_gen_worker.map_ready.connect(lambda payload: self.bus.publish("MAP_PAYLOAD_READY", payload))
+        self.world_gen_worker.map_ready.connect(self._on_worker_map_ready)
         self.world_gen_worker.error_occurred.connect(self.map_canvas.on_error)
         self.world_gen_worker.start()
+        
+    @pyqtSlot(dict)
+    def _on_worker_map_ready(self, payload):
+        self.bus.publish("MAP_PAYLOAD_READY", payload)
         
     def _show_game(self, payload=None):
         self.stack.setCurrentIndex(2)
@@ -149,7 +153,7 @@ class SagaDesktopApp(QMainWindow):
         self.bus.publish("LOAD_CAMPAIGN", {})
         
         # Trigger an initial map generation so the player isn't staring at a void
-        self.bus.publish("GENERATE_SAFE_MAP", {"location": "The Crossroads"})
+        self.bus.publish("GENERATE_AMBUSH_MAP", {"location": "Smuggler's Crossing"})
 
     def _on_map_payload_ready(self, payload):
         """Called when WorldGen finishes. If entities are present, it's combat."""
@@ -175,8 +179,7 @@ class SagaDesktopApp(QMainWindow):
     def _on_player_created(self, payload):
         """Handoff from Character Creation to the active Game Screen."""
         self.player_character = CharacterSheet(**payload)
-        self.bus.publish("HUD_UPDATE", {"character": self.player_character.model_dump()})
-        self.stack.setCurrentIndex(2)
+        self._show_game()
 
     def _on_combat_resolved(self, payload):
         target = payload.get("target")

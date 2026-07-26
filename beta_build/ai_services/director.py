@@ -160,16 +160,7 @@ class AIDirector:
             f"<|assistant|>\n"
             f"{{\n"
         )
-        output = self._llama(
-            full_prompt,
-            max_tokens=400,
-            temperature=0.7,
-            top_p=0.9,
-            stop=["}\n}"],
-        )
-        
-        raw_text = output.get("choices", [{}])[0].get("text", "").strip()
-        return "{\n" + raw_text
+        return full_prompt
 
     def build_director_prompt_with_spine(self, location_name: str, local_lore: str, subtle_seeds: list, campaign_weaver, filters: str = "", intent_raw: str = None, mechanical_result: str = "", scene_script: str = "") -> str:
         """Constructs a scene description prompt incorporating reactive seeds and the campaign spine organically."""
@@ -228,15 +219,7 @@ class AIDirector:
             f"{{\n"
         )
         
-        output = self._llama(
-            full_prompt,
-            max_tokens=500,
-            temperature=0.72,
-            top_p=0.9,
-            stop=["}\n}"],
-        )
-        raw_text = output.get("choices", [{}])[0].get("text", "").strip()
-        return "{\n" + raw_text
+        return full_prompt
 
     def evaluate_action_for_seed(self, intent_raw: str, mechanical_result: str) -> str:
         """Analyzes an action to see if it generates a new Reactive Seed."""

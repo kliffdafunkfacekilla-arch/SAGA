@@ -19,4 +19,6 @@ class EventBus:
                 try:
                     callback(payload)
                 except Exception as e:
+                    import traceback
                     print(f"[EventBus] Error in callback for {event_type}: {e}")
+                    traceback.print_exc()
