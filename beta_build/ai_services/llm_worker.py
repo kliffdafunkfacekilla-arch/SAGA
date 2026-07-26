@@ -17,8 +17,9 @@ class LLMWorker(QThread):
     generation_complete = pyqtSignal(str, str) # tag, full_text
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, model_path: str = None, parent=None):
+    def __init__(self, bus, model_path: str = None, parent=None):
         super().__init__(parent)
+        self.bus = bus
         self.model_path = model_path
         self._llama = None
         self._is_ready = False
@@ -84,9 +85,31 @@ class LLMWorker(QThread):
                         token = chunk["choices"][0].get("text", "")
                         if token:
                             full_text += token
-                            self.token_generated.emit(token)
+                            # We no longer emit token_generated to avoid printing raw JSON to UI
+                            # self.token_generated.emit(token)
                             
-                    self.generation_complete.emit(tag, full_text.strip())
+                    full_text = full_text.strip()
+                    
+                    # Try parsing as JSON
+                    try:
+                        # Clean up any potential markdown code blocks
+                        clean_text = full_text.replace("```json", "").replace("```", "").strip()
+                        data = json.loads(clean_text)
+                        
+                        prose = data.get("narrative_prose", full_text)
+                        mechanics = data.get("mechanical_actions", [])
+                        
+                        self.bus.publish("AI_NARRATED", {"prose": prose, "tag": tag})
+                        if mechanics:
+                            self.bus.publish("MECHANICS_TRIGGERED", {"actions": mechanics})
+                            
+                        self.generation_complete.emit(tag, prose)
+                        
+                    except json.JSONDecodeError:
+                        # Fallback for plain text
+                        self.bus.publish("AI_NARRATED", {"prose": full_text, "tag": tag})
+                        self.generation_complete.emit(tag, full_text)
+                        
                 except Exception as e:
                     self.error_occurred.emit(str(e))
             

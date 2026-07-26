@@ -11,6 +11,21 @@ from beta_build.ui.sprite_manager import SpriteManager
 from beta_build.ui.hud import CharacterHUD, StoryTracker
 from beta_build.core.fov_calculator import calculate_fov
 
+class LootItem(QGraphicsEllipseItem):
+    """Glowing map token representing a dropped item."""
+    def __init__(self, x, y, size, item_data, parent=None):
+        super().__init__(size*0.2, size*0.2, size*0.6, size*0.6, parent)
+        self.setPos(x * size, y * size)
+        self.item_data = item_data
+        
+        self.setBrush(QBrush(QColor("#FFD700"))) # Gold
+        self.setPen(QPen(QColor("white"), 1))
+        
+        self.label = QGraphicsTextItem(item_data.get("name", "Loot"), self)
+        self.label.setDefaultTextColor(QColor("#FFD700"))
+        self.label.setPos(-10, -15)
+        self.setZValue(1) # Under players, above dead bodies
+
 class TokenItem(QGraphicsEllipseItem):
     """Dynamic map token representing an entity (player, monster, etc)."""
     def __init__(self, x, y, size, color, name, uuid, tags=None, parent=None):
@@ -65,6 +80,7 @@ class BattleMapCanvas(QGraphicsView):
         self.tile_size = 32
         self.entities = {} # Map of UUID -> TokenItem
         self.tile_items = {} # Map of (x,y) -> QGraphicsRectItem
+        self.loot_items = []
         self.explored = set()
         self.visible_tiles = set()
         
@@ -124,15 +140,26 @@ class BattleMapCanvas(QGraphicsView):
         
     def move_entity(self, uuid: str, x: int, y: int):
         if uuid in self.entities:
-            self.entities[uuid].move_to_grid(x, y, self.tile_size)
+            token = self.entities[uuid]
+            token.move_to_grid(x, y, self.tile_size)
             if uuid == "player_1":
                 self.update_fov(x, y, 7)
+                self.check_loot_collisions(token)
             else:
                 # Update visibility of NPC if it moved
                 if (x, y) in self.visible_tiles:
-                    self.entities[uuid].setVisible(True)
+                    token.setVisible(True)
                 else:
-                    self.entities[uuid].setVisible(False)
+                    token.setVisible(False)
+                    
+    def check_loot_collisions(self, player_token):
+        colliding = player_token.collidingItems()
+        for item in colliding:
+            if isinstance(item, LootItem):
+                self.bus.publish("LOOT_ACQUIRED", {"item_data": item.item_data})
+                self.scene.removeItem(item)
+                if item in self.loot_items:
+                    self.loot_items.remove(item)
             
     def remove_entity(self, uuid: str):
         if uuid in self.entities:
@@ -143,9 +170,19 @@ class BattleMapCanvas(QGraphicsView):
         if uuid in self.entities:
             self.entities[uuid].flash_damage()
             
-    def kill_entity(self, uuid: str):
+    def kill_entity(self, uuid: str, loot_data: dict = None):
         if uuid in self.entities:
-            self.entities[uuid].set_dead()
+            token = self.entities[uuid]
+            token.set_dead()
+            if loot_data:
+                tx = int(token.pos().x() // self.tile_size)
+                ty = int(token.pos().y() // self.tile_size)
+                self.spawn_loot(tx, ty, loot_data)
+                
+    def spawn_loot(self, x, y, item_data):
+        loot = LootItem(x, y, self.tile_size, item_data)
+        self.scene.addItem(loot)
+        self.loot_items.append(loot)
             
     def update_fov(self, px: int, py: int, radius: int):
         """Calculates FOV and updates tile/token opacities."""
@@ -376,7 +413,7 @@ class MapCanvas(QWidget):
         self.battle_map.damage_entity(payload.get("uuid"))
         
     def _on_entity_died(self, payload):
-        self.battle_map.kill_entity(payload.get("uuid"))
+        self.battle_map.kill_entity(payload.get("uuid"), payload.get("loot_data"))
 
     def _on_map_payload_ready(self, payload):
         name = payload.get("name", "Unknown")

@@ -101,6 +101,10 @@ class SagaDesktopApp(QMainWindow):
         
         self.bus.subscribe("MAP_PAYLOAD_READY", self._on_map_payload_ready)
         self.bus.subscribe("COMBAT_RESOLVED", self._on_combat_resolved)
+        
+        self.bus.subscribe("AI_NARRATED", self._handle_ai_narrated)
+        self.bus.subscribe("MECHANICS_TRIGGERED", self._handle_mechanics_triggered)
+        self.bus.subscribe("LOOT_ACQUIRED", self._on_loot_acquired)
 
         # Background Workers Initialization
         self.init_workers()
@@ -117,9 +121,7 @@ class SagaDesktopApp(QMainWindow):
     def init_workers(self):
         """Initializes and connects QThreads for background AI and audio tasks."""
         # 1. LLM Worker
-        self.llm_worker = LLMWorker(parent=self)
-        self.llm_worker.token_generated.connect(self.map_canvas.on_token_received)
-        self.llm_worker.generation_complete.connect(self.map_canvas.on_generation_complete)
+        self.llm_worker = LLMWorker(self.bus, parent=self)
         self.llm_worker.generation_complete.connect(self._on_llm_complete)
         self.llm_worker.error_occurred.connect(self.map_canvas.on_error)
         self.llm_worker.start()
@@ -155,6 +157,17 @@ class SagaDesktopApp(QMainWindow):
                 "entities": entities, 
                 "player_stats": self.player_character.stats
             })
+
+    def _on_loot_acquired(self, payload):
+        from beta_build.core.models import Item
+        item_data = payload.get("item_data", {})
+        item = Item(**item_data)
+        self.player_character.inventory.bag.append(item)
+        self.bus.publish("HUD_UPDATE", {"character": self.player_character.model_dump()})
+        self.bus.publish("SYSTEM_LOG", {"message": f"<font color='#FFD700'><b>Loot Acquired:</b> {item.name}</font>"})
+        
+        intent_prompt = f"LOOT ACQUIRED: The player picked up {item.name}. Generate a brief narrative about them finding it."
+        self.bus.publish("EXECUTE_INTENT", {"intent": intent_prompt})
 
     def _on_player_created(self, payload):
         """Handoff from Character Creation to the active Game Screen."""
@@ -279,6 +292,29 @@ class SagaDesktopApp(QMainWindow):
                 self.stt_worker.start()
         else:
             self.stt_worker.stop_listening()
+
+    def _handle_ai_narrated(self, payload):
+        prose = payload.get("prose", "")
+        # Implement a basic typewriter effect by appending characters over time
+        # For a robust implementation, this would use a QTimer, but appending at once is safe for beta.
+        # We simulate it by just printing it nicely formatted.
+        self.map_canvas.log_view.append(f"<font color='#e0e0e0'>{prose}</font>")
+        
+    def _handle_mechanics_triggered(self, payload):
+        actions = payload.get("actions", [])
+        for action in actions:
+            if action.get("type") == "attack":
+                # Convert AI intent to ActionResolver payload
+                combat_payload = {
+                    "attacker": action.get("actor_uuid"),
+                    "defender": action.get("target_uuid"),
+                    "offense_stat": 5, # We'd pull real stats here
+                    "weapon_mod": 0,
+                    "defense_stat": 5, 
+                    "armor_mod": 0,
+                    "is_physical": True
+                }
+                self.bus.publish("COMBAT_ACTION_DECLARED", combat_payload)
 
     @pyqtSlot(str, str)
     def _on_llm_complete(self, tag: str, full_text: str):

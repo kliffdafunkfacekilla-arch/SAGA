@@ -81,7 +81,19 @@ class ActionResolver:
             
         # For the demo: Critical strikes (trauma=True) on NPCs kill them outright
         if trauma and target != payload.get("attacker"): 
-            self.bus.publish("ENTITY_DIED", {"uuid": target})
+            import random
+            from beta_build.core.loot_data import LOOT_TABLES
+            defender_tags = payload.get("defender_tags", [])
+            
+            loot_pool = "default"
+            for t in defender_tags:
+                if t in LOOT_TABLES:
+                    loot_pool = t
+                    break
+                    
+            item_data = random.choice(LOOT_TABLES[loot_pool])
+            
+            self.bus.publish("ENTITY_DIED", {"uuid": target, "loot_data": item_data})
         
         # Finally, pass the mathematical truth and the tags to the AI Director
         intent_prompt = f"COMBAT RESOLUTION: {log_string} Attacker Tags: {payload.get('attacker_tags', [])}. Defender Tags: {payload.get('defender_tags', [])}. Generate a 1-2 sentence brutal, visceral narrative description of this outcome."

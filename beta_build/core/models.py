@@ -47,6 +47,16 @@ class Inventory(BaseModel):
     def get_mental_tax(self) -> int:
         return sum(item.loadout_cost for slot, item in self.slots.items() if slot in self.mental_slots and item)
 
+    @property
+    def physical_armor_mod(self) -> int:
+        """Sums the armor_mod of all equipped physical armor."""
+        return sum(item.armor_mod for slot, item in self.slots.items() if slot in self.physical_slots and item)
+
+    @property
+    def mental_armor_mod(self) -> int:
+        """Sums the armor_mod of all equipped mental wards (rings, amulets)."""
+        return sum(item.armor_mod for slot, item in self.slots.items() if slot in self.mental_slots and item)
+
 class CharacterSheet(BaseModel):
     """
     The definitive source of truth for a player character's state.

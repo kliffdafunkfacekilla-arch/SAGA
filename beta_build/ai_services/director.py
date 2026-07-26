@@ -57,7 +57,15 @@ class AIDirector:
             "Never act as an assistant; you are the world and its narrator. "
             "STRICT GENRE: This is a Gritty Black-Powder Fantasy world. STRICTLY NO sci-fi, no spaceships, no lasers, no modern technology. "
             "CRITICAL: There are NO Humans, Elves, Dwarves, Orcs, or standard fantasy races in Okasha. DO NOT refer to the player or NPCs as such. "
-            "If the species is unspecified, refer to them as mutants, beasts, or drifters."
+            "If the species is unspecified, refer to them as mutants, beasts, or drifters. "
+            "OUTPUT FORMAT: You MUST return a strictly valid JSON object matching exactly this schema:\n"
+            "{\n"
+            '  "narrative_prose": "Your immersive prose response here.",\n'
+            '  "mechanical_actions": [{"type": "attack", "actor_uuid": "...", "target_uuid": "...", "stat_used": "might"}],\n'
+            '  "world_updates": {"add_tags": [], "remove_tags": []},\n'
+            '  "campaign_flags": []\n'
+            "}\n"
+            "Do NOT wrap the output in markdown code blocks like ```json."
         )
 
     def _get_scene_blueprint(self) -> str:
@@ -146,16 +154,21 @@ class AIDirector:
             f"3. End your response with an immediate consequence, threat, or by asking 'What do you do?'\n"
             f"4. Do NOT just describe empty scenery.\n"
             f"{action_directive}\n"
+            f"5. Output ONLY raw JSON matching the required schema.\n"
             f"<|end|>\n"
             f"<|assistant|>\n"
+            f"{{\n"
         )
         output = self._llama(
             full_prompt,
             max_tokens=400,
             temperature=0.7,
             top_p=0.9,
+            stop=["}\n}"],
         )
-        return output.get("choices", [{}])[0].get("text", "").strip()
+        
+        raw_text = output.get("choices", [{}])[0].get("text", "").strip()
+        return "{\n" + raw_text
 
     def build_director_prompt_with_spine(self, location_name: str, local_lore: str, subtle_seeds: list, campaign_weaver, filters: str = "", intent_raw: str = None, mechanical_result: str = "", scene_script: str = "") -> str:
         """Constructs a scene description prompt incorporating reactive seeds and the campaign spine organically."""
@@ -208,8 +221,10 @@ class AIDirector:
             f"7. MAP TRAVERSAL: If the current script step requires moving to a new area, provide clues or directions leading off-map.\n"
             f"8. AGENCY HANDOFF: End your narration with an immediate consequence, threat, or by asking 'What do you do?' to hand agency back to the player.\n"
             f"{action_directive}\n"
+            f"9. Output ONLY raw JSON matching the required schema.\n"
             f"<|end|>\n"
             f"<|assistant|>\n"
+            f"{{\n"
         )
         
         output = self._llama(
@@ -217,8 +232,10 @@ class AIDirector:
             max_tokens=500,
             temperature=0.72,
             top_p=0.9,
+            stop=["}\n}"],
         )
-        return output.get("choices", [{}])[0].get("text", "").strip()
+        raw_text = output.get("choices", [{}])[0].get("text", "").strip()
+        return "{\n" + raw_text
 
     def evaluate_action_for_seed(self, intent_raw: str, mechanical_result: str) -> str:
         """Analyzes an action to see if it generates a new Reactive Seed."""
