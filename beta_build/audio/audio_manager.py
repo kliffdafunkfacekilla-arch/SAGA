@@ -57,9 +57,7 @@ class STTWorker(QThread):
         self.recognizer = sr.Recognizer()
         # Force 16kHz sample rate for Whisper compatibility
         self.microphone = sr.Microphone(sample_rate=16000)
-        
-        # Load local Faster-Whisper model (tiny.en for max speed on CPU)
-        self.model = WhisperModel("tiny.en", device="cpu", compute_type="int8")
+        self.model = None
         
         # Optimize recognizer for quicker responses
         self.recognizer.energy_threshold = 300
@@ -69,6 +67,13 @@ class STTWorker(QThread):
         self._active = False
 
     def run(self):
+        try:
+            # Strictly offline. Will check local cache only.
+            self.model = WhisperModel("tiny.en", device="cpu", compute_type="int8", download_root="models/whisper", local_files_only=True)
+        except Exception as e:
+            self.error_occurred.emit(f"Failed to load STT model: {str(e)}")
+            return
+            
         self._active = True
         with self.microphone as source:
             self.recognizer.adjust_for_ambient_noise(source, duration=1)

@@ -62,6 +62,10 @@ class CampaignManager:
             
         self.bus.publish("SYSTEM_LOG", {"message": log_str})
         
+        # Force the AI Director to narrate the new campaign node
+        intent_prompt = f"The campaign has entered a new phase: {title}. Description: {desc}. Narrate this setup dramatically."
+        self.bus.publish("EXECUTE_AI_INTENT", {"intent": intent_prompt})
+        
     def _on_resolve_dynamic_slot(self, payload: Dict[str, Any]):
         # Called when a player resolves a procedural local event
         if self.remaining_dynamic_slots > 0:

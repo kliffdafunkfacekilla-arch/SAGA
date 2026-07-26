@@ -147,6 +147,9 @@ class SagaDesktopApp(QMainWindow):
         # Hook up the Pydantic character state to the UI HUD
         self.bus.publish("HUD_UPDATE", {"character": self.player_character.model_dump()})
         self.bus.publish("LOAD_CAMPAIGN", {})
+        
+        # Trigger an initial map generation so the player isn't staring at a void
+        self.bus.publish("GENERATE_SAFE_MAP", {"location": "The Crossroads"})
 
     def _on_map_payload_ready(self, payload):
         """Called when WorldGen finishes. If entities are present, it's combat."""
