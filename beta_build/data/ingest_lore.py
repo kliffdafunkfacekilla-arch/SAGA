@@ -1,6 +1,6 @@
 import os
 import logging
-
+from typing import List
 # Assuming this script is run from the project root or SAGA directory
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))

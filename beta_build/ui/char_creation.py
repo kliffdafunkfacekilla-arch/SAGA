@@ -1,4 +1,5 @@
 import logging
+from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
     QPushButton, QComboBox, QFormLayout, QSpinBox, 
     QStackedWidget, QRadioButton, QButtonGroup, QCheckBox,

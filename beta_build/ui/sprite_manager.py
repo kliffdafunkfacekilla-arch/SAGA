@@ -1,3 +1,4 @@
+from PyQt6.QtGui import QPixmap, QColor, QPainter, QBrush
 from PyQt6.QtCore import Qt
 import os
 

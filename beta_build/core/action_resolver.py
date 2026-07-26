@@ -47,6 +47,7 @@ class ActionResolver:
         weapon_mod = payload.get("weapon_mod", 0)
         armor_mod = payload.get("armor_mod", 0)
         
+        defense_stat = payload.get("defense_stat", 5)
         is_physical = payload.get("is_physical", True)
         
         attacker_tags = payload.get("attacker_tags", [])

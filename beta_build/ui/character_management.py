@@ -1,3 +1,4 @@
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QGridLayout, QFrame, QScrollArea,
                              QGroupBox, QTabWidget)
 from PyQt6.QtCore import Qt
